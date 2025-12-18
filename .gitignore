@@ -1,0 +1,51 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+tfplan.*
+
+# SSH Keys
+*.pem
+*.key
+id_rsa*
+*.pub
+
+# Environment variables
+.env
+.env.*
+*.secret
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+*.json
+!package.json
+!package-lock.json
+
+# Logs
+*.log
+
+# Kubernetes
+kubeconfig
+config-*
+*.kubeconfig
