@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+aiohttp
+asyncpg
+aiosqlite
+redis[hiredis]
+prometheus-client
+prometheus-fastapi-instrumentator
+alembic
+sqlalchemy

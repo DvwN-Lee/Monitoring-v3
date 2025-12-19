@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-service-deployment
+  labels:
+    app: blog-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: blog-service
+  template:
+    metadata:
+      labels:
+        app: blog-service
+        version: v1
+    spec:
+      containers:
+      - name: blog-service-container
+        image: dongju101/blog-service:bugfix-e213548
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8005
+          name: http
+        envFrom:
+        - configMapRef:
+            name: app-config
+        env:
+        - name: SERVICE_NAME
+          value: "blog-service"
+        - name: SERVICE_PORT
+          value: "8005"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10

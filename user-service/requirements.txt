@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+werkzeug
+redis[hiredis]
+pydantic[email]
+asyncpg
+aiosqlite
+prometheus-client
+prometheus-fastapi-instrumentator

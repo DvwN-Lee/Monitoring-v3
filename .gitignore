@@ -24,6 +24,7 @@ id_rsa*
 # Environment variables
 .env
 .env.*
+!.env.*.example
 *.secret
 
 # OS

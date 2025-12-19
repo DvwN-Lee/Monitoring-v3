@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pyjwt
+aiohttp
+prometheus-client
+prometheus-fastapi-instrumentator
+slowapi

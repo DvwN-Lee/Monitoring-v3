@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.env.*
+*.db
+blog.db
+.git/
+.gitignore
+README.md
+*.md
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+alembic/versions/*.pyc
