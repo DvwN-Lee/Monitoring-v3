@@ -45,7 +45,7 @@ output "kiali_url" {
 # Instructions
 output "deployment_status" {
   description = "Deployment status and next steps"
-  value = <<-EOT
+  value       = <<-EOT
     Infrastructure Deployment Complete!
 
     Automated Bootstrap In Progress:
