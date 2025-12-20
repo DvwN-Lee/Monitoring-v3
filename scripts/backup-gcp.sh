@@ -1,6 +1,6 @@
 #!/bin/bash
-# Solid Cloud Cluster 전체 백업 스크립트
-# 실행: ./scripts/backup-solid-cloud.sh
+# GCP k3s Cluster 전체 백업 스크립트
+# 실행: ./scripts/backup-gcp.sh
 
 set -e
 
@@ -10,12 +10,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== Solid Cloud Cluster 백업 시작 ===${NC}"
+echo -e "${GREEN}=== GCP k3s Cluster 백업 시작 ===${NC}"
 echo ""
 
 # 환경 변수 설정
 export BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
-export BACKUP_BASE_DIR=~/solid-cloud-backup
+export BACKUP_BASE_DIR=~/gcp-k3s-backup
 export BACKUP_DIR=$BACKUP_BASE_DIR/$(date +%Y%m%d)
 export NAMESPACE=titanium-prod
 export PG_POD=postgresql-0
@@ -122,7 +122,7 @@ echo ""
 
 # Terraform 상태 백업
 echo -e "${GREEN}[7/8] Terraform 상태 백업${NC}"
-TERRAFORM_DIR=~/Desktop/Git/Monitoring-v2/terraform/environments/solid-cloud
+TERRAFORM_DIR=~/Desktop/Git/Monitoring-v3/terraform/environments/gcp
 
 if [ -d "$TERRAFORM_DIR" ]; then
     cd $TERRAFORM_DIR
@@ -149,7 +149,7 @@ echo ""
 # 백업 매니페스트 생성
 echo -e "${GREEN}[8/8] 백업 매니페스트 생성${NC}"
 cat > $BACKUP_DIR/BACKUP_MANIFEST.txt <<EOF
-=== Solid Cloud Backup Manifest ===
+=== GCP k3s Backup Manifest ===
 Backup Date: $BACKUP_DATE
 Backup Directory: $BACKUP_DIR
 Cluster Context: $CURRENT_CONTEXT
@@ -183,7 +183,7 @@ echo ""
 # 백업 압축
 echo -e "${GREEN}백업 압축 중...${NC}"
 cd $BACKUP_BASE_DIR
-ARCHIVE_NAME="solid-cloud-backup-$BACKUP_DATE.tar.gz"
+ARCHIVE_NAME="gcp-k3s-backup-$BACKUP_DATE.tar.gz"
 tar czf $ARCHIVE_NAME $(basename $BACKUP_DIR)
 
 # 체크섬 생성

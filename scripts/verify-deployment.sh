@@ -6,7 +6,7 @@ echo "========================================"
 echo ""
 
 # kubeconfig 설정
-export KUBECONFIG=~/.kube/config-solid-cloud
+export KUBECONFIG=~/.kube/config-gcp
 
 # 색상 코드
 GREEN='\033[0;32m'
