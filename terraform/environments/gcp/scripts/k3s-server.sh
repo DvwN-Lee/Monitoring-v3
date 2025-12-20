@@ -106,8 +106,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/DvwN-Lee/Monitoring-v2.git
-    targetRevision: feat/gcp-deployment
+    repoURL: https://github.com/DvwN-Lee/Monitoring-v3.git
+    targetRevision: main
     path: k8s-manifests/overlays/gcp
   destination:
     server: https://kubernetes.default.svc

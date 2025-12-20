@@ -17,7 +17,7 @@ resources:
   - istio/peer-authentication-databases.yaml
   - istio/destination-rules.yaml
 
-# Patches for Solid Cloud environment
+# Patches for GCP environment
 patches:
   # Secret은 Terraform kubernetes module에서 관리
 
