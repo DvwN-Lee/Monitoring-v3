@@ -342,3 +342,141 @@ func TestComputePlanOnly(t *testing.T) {
 func TestSpotInstancePreemption(t *testing.T) {
 	t.Skip("Spot 인스턴스 Preemption 테스트는 시간이 오래 걸려 기본적으로 skip됩니다")
 }
+
+// ============================================================================
+// Negative Firewall Connectivity 테스트 (실제 포트 차단 검증)
+// ============================================================================
+
+// TestNegativeFirewallConnectivity 차단 포트 연결 거부 검증
+func TestNegativeFirewallConnectivity(t *testing.T) {
+	t.Parallel()
+
+	// 격리된 환경 사용
+	terraformOptions, clusterName := GetIsolatedTerraformOptions(t)
+
+	defer terraform.Destroy(t, terraformOptions)
+	terraform.InitAndApply(t, terraformOptions)
+
+	masterPublicIP := terraform.Output(t, terraformOptions, "master_external_ip")
+	require.NotEmpty(t, masterPublicIP, "Master public IP가 비어있습니다")
+
+	t.Logf("Negative Firewall 테스트 시작 (클러스터: %s, IP: %s)", clusterName, masterPublicIP)
+
+	// 차단되어야 할 포트 테스트
+	blockedPortsToTest := []int{
+		8080,  // 일반 HTTP 대체
+		9090,  // Prometheus 기본
+		2379,  // etcd client
+		3306,  // MySQL
+		5432,  // PostgreSQL
+		10250, // Kubelet API
+	}
+
+	timeout := 5 * time.Second
+
+	for _, port := range blockedPortsToTest {
+		t.Run(fmt.Sprintf("Port_%d_Blocked", port), func(t *testing.T) {
+			isBlocked := TestPortBlocked(t, masterPublicIP, port, timeout)
+			if isBlocked {
+				t.Logf("포트 %d: 정상적으로 차단됨", port)
+			} else {
+				t.Errorf("보안 경고: 포트 %d가 외부에서 접근 가능", port)
+			}
+		})
+	}
+
+	// 허용된 포트는 접근 가능해야 함
+	allowedPorts := []int{
+		22,   // SSH (IAP 경유하지 않으면 차단될 수 있음)
+		6443, // K8s API
+	}
+
+	for _, port := range allowedPorts {
+		t.Run(fmt.Sprintf("Port_%d_Allowed", port), func(t *testing.T) {
+			isBlocked := TestPortBlocked(t, masterPublicIP, port, timeout)
+			if !isBlocked {
+				t.Logf("포트 %d: 정상적으로 접근 가능", port)
+			} else {
+				// 22번 포트는 IAP 경유 시에만 접근 가능하므로 경고만 출력
+				if port == 22 {
+					t.Logf("경고: 포트 %d - IAP 경유하지 않아 직접 접근 차단됨 (정상)", port)
+				} else {
+					t.Logf("경고: 포트 %d가 차단됨 - 네트워크 설정 확인 필요", port)
+				}
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Node Scale-up 테스트
+// ============================================================================
+
+// TestNodeScaleUp Worker 노드 Scale-up 테스트
+func TestNodeScaleUp(t *testing.T) {
+	t.Parallel()
+
+	// 격리된 환경 사용
+	terraformOptions, clusterName := GetIsolatedTerraformOptions(t)
+
+	defer terraform.Destroy(t, terraformOptions)
+
+	// Step 1: worker_count=1로 초기 배포
+	terraformOptions.Vars["worker_count"] = 1
+	terraform.InitAndApply(t, terraformOptions)
+
+	masterPublicIP := terraform.Output(t, terraformOptions, "master_external_ip")
+	require.NotEmpty(t, masterPublicIP, "Master public IP가 비어있습니다")
+
+	privateKeyPath, _ := GetSSHKeyPairPath()
+	host := CreateSSHHost(t, masterPublicIP, privateKeyPath)
+
+	// 초기 노드 목록 기록
+	initialNodes, err := GetK3sNodeNames(t, host)
+	require.NoError(t, err, "초기 노드 목록 조회 실패")
+	t.Logf("초기 노드 목록 (%d개): %v", len(initialNodes), initialNodes)
+
+	expectedInitialCount := 2 // master(1) + worker(1)
+	require.Equal(t, expectedInitialCount, len(initialNodes), "초기 노드 수가 예상과 다릅니다")
+
+	// Step 2: worker_count=2로 Scale-up
+	terraformOptions.Vars["worker_count"] = 2
+	terraform.Apply(t, terraformOptions)
+
+	t.Log("Scale-up 완료, 노드 조인 대기...")
+
+	// 새 노드 조인 대기
+	expectedFinalCount := 3 // master(1) + worker(2)
+	err = WaitForK3sNodesReady(t, host, expectedFinalCount)
+	require.NoError(t, err, "Scale-up 후 노드 Ready 상태 확인 실패")
+
+	// 최종 노드 목록 조회
+	finalNodes, err := GetK3sNodeNames(t, host)
+	require.NoError(t, err, "최종 노드 목록 조회 실패")
+	t.Logf("최종 노드 목록 (%d개): %v", len(finalNodes), finalNodes)
+
+	// Step 3: 기존 노드가 유지되는지 확인
+	for _, initialNode := range initialNodes {
+		found := false
+		for _, finalNode := range finalNodes {
+			if initialNode == finalNode {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "기존 노드 '%s'가 Scale-up 후 사라졌습니다", initialNode)
+	}
+
+	// Step 4: 새 노드가 추가되었는지 확인
+	newNodeCount := len(finalNodes) - len(initialNodes)
+	assert.Equal(t, 1, newNodeCount, "새로 추가된 노드 수가 1개여야 합니다")
+
+	// Step 5: 모든 노드가 Ready 상태인지 확인
+	for _, nodeName := range finalNodes {
+		isReady, err := VerifyNodeReady(t, host, nodeName)
+		require.NoError(t, err, "노드 '%s' 상태 확인 실패", nodeName)
+		assert.True(t, isReady, "노드 '%s'가 Ready 상태가 아닙니다", nodeName)
+	}
+
+	t.Logf("Node Scale-up 테스트 통과 (클러스터: %s): %d -> %d 노드", clusterName, expectedInitialCount, expectedFinalCount)
+}

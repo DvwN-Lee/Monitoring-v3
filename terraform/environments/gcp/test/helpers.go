@@ -1,7 +1,10 @@
 package test
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -388,4 +391,408 @@ func VerifyIAMMonitoringPermission(t *testing.T, host ssh.Host) error {
 	}
 
 	return nil
+}
+
+// ============================================================================
+// Negative Firewall 및 보안 테스트 함수
+// ============================================================================
+
+// BlockedPorts 외부에서 차단되어야 할 포트 목록
+var BlockedPorts = []int{
+	8080,  // 일반 HTTP 대체
+	9090,  // Prometheus 기본
+	2379,  // etcd client
+	2380,  // etcd peer
+	3306,  // MySQL/MariaDB
+	5432,  // PostgreSQL
+	10250, // Kubelet API
+	10251, // kube-scheduler
+	10252, // kube-controller-manager
+}
+
+// TestPortBlocked 외부에서 포트 접근 차단 여부 테스트
+func TestPortBlocked(t *testing.T, targetIP string, port int, timeout time.Duration) bool {
+	address := net.JoinHostPort(targetIP, fmt.Sprintf("%d", port))
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		// 연결 실패 = 포트 차단됨
+		return true
+	}
+	conn.Close()
+	// 연결 성공 = 포트 열림
+	return false
+}
+
+// TestMultiplePortsBlocked 여러 포트가 차단되었는지 테스트
+func TestMultiplePortsBlocked(t *testing.T, targetIP string, ports []int, timeout time.Duration) map[int]bool {
+	results := make(map[int]bool)
+	for _, port := range ports {
+		results[port] = TestPortBlocked(t, targetIP, port, timeout)
+	}
+	return results
+}
+
+// GCPFirewallRule GCP Firewall 규칙 구조체
+type GCPFirewallRule struct {
+	Name         string   `json:"name"`
+	Network      string   `json:"network"`
+	SourceRanges []string `json:"sourceRanges"`
+	Allowed      []struct {
+		IPProtocol string   `json:"IPProtocol"`
+		Ports      []string `json:"ports"`
+	} `json:"allowed"`
+	TargetTags []string `json:"targetTags"`
+}
+
+// GetFirewallRule GCP Firewall 규칙 조회
+func GetFirewallRule(t *testing.T, projectID, firewallName string) (*GCPFirewallRule, error) {
+	output, err := RunShellCommand(t, "gcloud",
+		"compute", "firewall-rules", "describe", firewallName,
+		"--project", projectID,
+		"--format", "json",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Firewall 규칙 '%s' 조회 실패: %v", firewallName, err)
+	}
+
+	var rule GCPFirewallRule
+	if err := json.Unmarshal([]byte(output), &rule); err != nil {
+		return nil, fmt.Errorf("Firewall 규칙 JSON 파싱 실패: %v", err)
+	}
+
+	return &rule, nil
+}
+
+// VerifyFirewallSourceRanges Firewall source_ranges 검증
+func VerifyFirewallSourceRanges(t *testing.T, projectID, firewallName string, expectedRanges []string) error {
+	rule, err := GetFirewallRule(t, projectID, firewallName)
+	if err != nil {
+		return err
+	}
+
+	for _, expected := range expectedRanges {
+		found := false
+		for _, actual := range rule.SourceRanges {
+			if actual == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("Firewall '%s': 예상 source_range '%s' 미발견, 실제: %v",
+				firewallName, expected, rule.SourceRanges)
+		}
+	}
+
+	return nil
+}
+
+// VerifyFirewallNotOpenToWorld Firewall이 0.0.0.0/0으로 열려있지 않은지 검증
+func VerifyFirewallNotOpenToWorld(t *testing.T, projectID, firewallName string) error {
+	rule, err := GetFirewallRule(t, projectID, firewallName)
+	if err != nil {
+		return err
+	}
+
+	for _, sourceRange := range rule.SourceRanges {
+		if sourceRange == "0.0.0.0/0" {
+			return fmt.Errorf("Firewall '%s': 전체 인터넷(0.0.0.0/0)에 개방됨 - 보안 위험", firewallName)
+		}
+	}
+
+	return nil
+}
+
+// ============================================================================
+// HTTP/JSON 검증 함수
+// ============================================================================
+
+// HTTPResponse HTTP 응답 구조체
+type HTTPResponse struct {
+	StatusCode int
+	Body       string
+	Headers    http.Header
+}
+
+// TestHTTPEndpoint HTTP endpoint 테스트
+func TestHTTPEndpoint(t *testing.T, url string, timeout time.Duration) (*HTTPResponse, error) {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP 요청 실패: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body := make([]byte, 0)
+	buf := make([]byte, 1024)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			body = append(body, buf[:n]...)
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	return &HTTPResponse{
+		StatusCode: resp.StatusCode,
+		Body:       string(body),
+		Headers:    resp.Header,
+	}, nil
+}
+
+// TestHTTPEndpointStrict strict mode HTTP endpoint 테스트 (200 OK만 허용)
+func TestHTTPEndpointStrict(t *testing.T, url string, timeout time.Duration) error {
+	resp, err := TestHTTPEndpoint(t, url, timeout)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("HTTP 응답 코드 불일치: 예상 200, 실제 %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// ValidateJSONResponse JSON 응답 필드 검증
+func ValidateJSONResponse(t *testing.T, url string, timeout time.Duration, expectedFields map[string]interface{}) error {
+	resp, err := TestHTTPEndpoint(t, url, timeout)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("HTTP 응답 코드 불일치: 예상 200, 실제 %d", resp.StatusCode)
+	}
+
+	var jsonBody map[string]interface{}
+	if err := json.Unmarshal([]byte(resp.Body), &jsonBody); err != nil {
+		return fmt.Errorf("JSON 파싱 실패: %v", err)
+	}
+
+	for key, expectedValue := range expectedFields {
+		actualValue, exists := jsonBody[key]
+		if !exists {
+			return fmt.Errorf("JSON 필드 '%s' 미존재", key)
+		}
+		if expectedValue != nil && actualValue != expectedValue {
+			return fmt.Errorf("JSON 필드 '%s' 값 불일치: 예상 %v, 실제 %v", key, expectedValue, actualValue)
+		}
+	}
+
+	return nil
+}
+
+// ============================================================================
+// ArgoCD 상태 검증 함수
+// ============================================================================
+
+// ArgoAppStatus ArgoCD Application 상태 구조체
+type ArgoAppStatus struct {
+	Name         string `json:"name"`
+	SyncStatus   string `json:"syncStatus"`
+	HealthStatus string `json:"healthStatus"`
+}
+
+// GetArgoCDApplicationStatuses ArgoCD Application 상태 조회
+func GetArgoCDApplicationStatuses(t *testing.T, host ssh.Host) ([]ArgoAppStatus, error) {
+	command := `sudo kubectl get applications -n argocd -o jsonpath='{range .items[*]}{.metadata.name},{.status.sync.status},{.status.health.status}{"\n"}{end}'`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return nil, fmt.Errorf("ArgoCD Application 상태 조회 실패: %v", err)
+	}
+
+	var statuses []ArgoAppStatus
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		if len(parts) >= 3 {
+			statuses = append(statuses, ArgoAppStatus{
+				Name:         parts[0],
+				SyncStatus:   parts[1],
+				HealthStatus: parts[2],
+			})
+		}
+	}
+
+	return statuses, nil
+}
+
+// WaitForArgoCDAppHealthy ArgoCD Application Healthy 상태 대기
+func WaitForArgoCDAppHealthy(t *testing.T, host ssh.Host, appName string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		statuses, err := GetArgoCDApplicationStatuses(t, host)
+		if err != nil {
+			t.Logf("ArgoCD 상태 조회 실패, 재시도: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		for _, status := range statuses {
+			if status.Name == appName {
+				if status.SyncStatus == "Synced" && status.HealthStatus == "Healthy" {
+					t.Logf("ArgoCD App '%s': Synced + Healthy", appName)
+					return nil
+				}
+				t.Logf("ArgoCD App '%s': Sync=%s, Health=%s", appName, status.SyncStatus, status.HealthStatus)
+			}
+		}
+
+		time.Sleep(10 * time.Second)
+	}
+
+	return fmt.Errorf("ArgoCD App '%s'가 timeout 내에 Healthy 상태에 도달하지 못함", appName)
+}
+
+// VerifyAllArgoCDAppsHealthy 모든 ArgoCD Application이 Healthy인지 검증
+func VerifyAllArgoCDAppsHealthy(t *testing.T, host ssh.Host) error {
+	statuses, err := GetArgoCDApplicationStatuses(t, host)
+	if err != nil {
+		return err
+	}
+
+	var unhealthyApps []string
+	for _, status := range statuses {
+		if status.SyncStatus != "Synced" || status.HealthStatus != "Healthy" {
+			unhealthyApps = append(unhealthyApps, fmt.Sprintf("%s(Sync=%s,Health=%s)",
+				status.Name, status.SyncStatus, status.HealthStatus))
+		}
+	}
+
+	if len(unhealthyApps) > 0 {
+		return fmt.Errorf("Unhealthy ArgoCD Apps: %v", unhealthyApps)
+	}
+
+	return nil
+}
+
+// ============================================================================
+// Prometheus 검증 함수
+// ============================================================================
+
+// PrometheusTarget Prometheus 타겟 구조체
+type PrometheusTarget struct {
+	Labels      map[string]string `json:"labels"`
+	ScrapeURL   string            `json:"scrapeUrl"`
+	Health      string            `json:"health"` // up, down, unknown
+	LastError   string            `json:"lastError"`
+	LastScrape  string            `json:"lastScrape"`
+}
+
+// PrometheusTargetsResponse Prometheus API 응답
+type PrometheusTargetsResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ActiveTargets []PrometheusTarget `json:"activeTargets"`
+	} `json:"data"`
+}
+
+// GetPrometheusTargets Prometheus API로 타겟 조회
+func GetPrometheusTargets(t *testing.T, host ssh.Host, prometheusNodePort string) ([]PrometheusTarget, error) {
+	command := fmt.Sprintf(`curl -s "http://localhost:%s/api/v1/targets"`, prometheusNodePort)
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return nil, fmt.Errorf("Prometheus API 호출 실패: %v", err)
+	}
+
+	var response PrometheusTargetsResponse
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		return nil, fmt.Errorf("Prometheus 응답 JSON 파싱 실패: %v", err)
+	}
+
+	if response.Status != "success" {
+		return nil, fmt.Errorf("Prometheus API 응답 실패: %s", response.Status)
+	}
+
+	return response.Data.ActiveTargets, nil
+}
+
+// VerifyPrometheusTargetsUp 필수 타겟이 up 상태인지 확인
+func VerifyPrometheusTargetsUp(t *testing.T, host ssh.Host, prometheusNodePort string, requiredJobs []string) error {
+	targets, err := GetPrometheusTargets(t, host, prometheusNodePort)
+	if err != nil {
+		return err
+	}
+
+	jobStatus := make(map[string]bool)
+	for _, target := range targets {
+		job, exists := target.Labels["job"]
+		if exists && target.Health == "up" {
+			jobStatus[job] = true
+		}
+	}
+
+	var missingJobs []string
+	for _, required := range requiredJobs {
+		if !jobStatus[required] {
+			missingJobs = append(missingJobs, required)
+		}
+	}
+
+	if len(missingJobs) > 0 {
+		return fmt.Errorf("Prometheus: 다음 job이 up 상태가 아님: %v", missingJobs)
+	}
+
+	return nil
+}
+
+// ============================================================================
+// K3s 노드 관리 함수
+// ============================================================================
+
+// GetK3sNodeNames K3s 클러스터의 노드 이름 목록 조회
+func GetK3sNodeNames(t *testing.T, host ssh.Host) ([]string, error) {
+	command := `sudo kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return nil, fmt.Errorf("K3s 노드 목록 조회 실패: %v", err)
+	}
+
+	var nodeNames []string
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if line != "" {
+			nodeNames = append(nodeNames, line)
+		}
+	}
+
+	return nodeNames, nil
+}
+
+// VerifyNodeExists 특정 노드가 클러스터에 존재하는지 확인
+func VerifyNodeExists(t *testing.T, host ssh.Host, nodeName string) bool {
+	nodeNames, err := GetK3sNodeNames(t, host)
+	if err != nil {
+		return false
+	}
+
+	for _, name := range nodeNames {
+		if name == nodeName {
+			return true
+		}
+	}
+
+	return false
+}
+
+// VerifyNodeReady 특정 노드가 Ready 상태인지 확인
+func VerifyNodeReady(t *testing.T, host ssh.Host, nodeName string) (bool, error) {
+	command := fmt.Sprintf(`sudo kubectl get node %s -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'`, nodeName)
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return false, fmt.Errorf("노드 '%s' 상태 조회 실패: %v", nodeName, err)
+	}
+
+	return strings.TrimSpace(output) == "True", nil
 }

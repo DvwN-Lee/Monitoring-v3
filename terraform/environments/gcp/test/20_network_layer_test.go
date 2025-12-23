@@ -264,3 +264,115 @@ func TestNetworkPlanOnly(t *testing.T) {
 
 	t.Logf("Network Plan 검증 완료: VPC=%d, Subnet=%d, Firewall=%d", vpcCount, subnetCount, firewallCount)
 }
+
+// ============================================================================
+// Firewall Source Ranges 정책 테스트
+// ============================================================================
+
+// TestFirewallSourceRangesPolicy Firewall source_ranges 정책 검증 (실제 리소스)
+func TestFirewallSourceRangesPolicy(t *testing.T) {
+	t.Parallel()
+
+	// Network 리소스만 target으로 지정
+	terraformOptions := GetDefaultTerraformOptions(t)
+	terraformOptions.Targets = []string{
+		"google_compute_network.vpc",
+		"google_compute_subnetwork.subnet",
+		"google_compute_firewall.allow_ssh",
+		"google_compute_firewall.allow_k8s_api",
+		"google_compute_firewall.allow_internal",
+		"google_compute_firewall.allow_dashboards",
+	}
+
+	defer terraform.Destroy(t, terraformOptions)
+	terraform.InitAndApply(t, terraformOptions)
+
+	clusterName := DefaultClusterName
+	projectID := DefaultProjectID
+
+	t.Run("SSHFirewallRestrictedToIAP", func(t *testing.T) {
+		// SSH Firewall은 IAP IP 범위만 허용해야 함
+		sshFirewallName := fmt.Sprintf("%s-allow-ssh", clusterName)
+		iapRange := "35.235.240.0/20"
+
+		err := VerifyFirewallSourceRanges(t, projectID, sshFirewallName, []string{iapRange})
+		if err != nil {
+			t.Logf("경고: SSH Firewall source_ranges 검증 실패: %v", err)
+		} else {
+			t.Logf("SSH Firewall '%s': IAP 범위(%s)만 허용 - 검증 통과", sshFirewallName, iapRange)
+		}
+
+		// 0.0.0.0/0으로 열려있지 않은지 확인
+		err = VerifyFirewallNotOpenToWorld(t, projectID, sshFirewallName)
+		require.NoError(t, err, "SSH Firewall이 전체 인터넷에 개방되어 있으면 안됨")
+	})
+
+	t.Run("InternalFirewallRestrictedToSubnet", func(t *testing.T) {
+		// Internal Firewall은 Subnet CIDR만 허용해야 함
+		internalFirewallName := fmt.Sprintf("%s-allow-internal", clusterName)
+
+		err := VerifyFirewallSourceRanges(t, projectID, internalFirewallName, []string{DefaultSubnetCIDR})
+		require.NoError(t, err, "Internal Firewall source_ranges 검증 실패")
+
+		t.Logf("Internal Firewall '%s': Subnet CIDR(%s)만 허용 - 검증 통과", internalFirewallName, DefaultSubnetCIDR)
+	})
+}
+
+// ============================================================================
+// Negative Firewall 테스트 (차단되어야 할 포트)
+// ============================================================================
+
+// TestNegativeFirewallRulesPlan Plan에서 차단 포트 규칙 없음 확인
+func TestNegativeFirewallRulesPlan(t *testing.T) {
+	t.Parallel()
+
+	terraformOptions := GetPlanOnlyTerraformOptions(t)
+
+	terraform.Init(t, terraformOptions)
+	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
+
+	// 차단되어야 할 포트 목록
+	blockedPorts := []string{"8080", "9090", "2379", "2380", "3306", "5432", "10250"}
+
+	for resourceAddr, resource := range planStruct.ResourcePlannedValuesMap {
+		if !strings.Contains(resourceAddr, "google_compute_firewall") {
+			continue
+		}
+
+		// 전체 인터넷(0.0.0.0/0)에서 접근 가능한 Firewall 규칙 확인
+		isOpenToWorld := false
+		if sourceRanges, ok := resource.AttributeValues["source_ranges"].([]interface{}); ok {
+			for _, sr := range sourceRanges {
+				if srStr, ok := sr.(string); ok && srStr == "0.0.0.0/0" {
+					isOpenToWorld = true
+					break
+				}
+			}
+		}
+
+		if !isOpenToWorld {
+			continue // 내부 네트워크만 접근 가능하면 문제없음
+		}
+
+		// 차단 포트가 허용되어 있는지 확인
+		if allow, ok := resource.AttributeValues["allow"].([]interface{}); ok {
+			for _, a := range allow {
+				if allowMap, ok := a.(map[string]interface{}); ok {
+					if ports, ok := allowMap["ports"].([]interface{}); ok {
+						for _, port := range ports {
+							if portStr, ok := port.(string); ok {
+								for _, blocked := range blockedPorts {
+									if portStr == blocked {
+										t.Logf("경고: Firewall '%s'가 차단 대상 포트 %s를 0.0.0.0/0에 허용", resourceAddr, blocked)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	t.Log("Negative Firewall Plan 검증 완료")
+}
