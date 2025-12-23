@@ -332,10 +332,8 @@ type GCPInstanceScheduling struct {
 }
 
 // VerifySpotInstance Spot/Preemptible 인스턴스 검증
-func VerifySpotInstance(t *testing.T, instanceName string) (bool, error) {
-	projectID := DefaultProjectID
-	zone := DefaultZone
-
+// projectID, zone을 인자로 받아 동적 환경 지원
+func VerifySpotInstance(t *testing.T, instanceName, projectID, zone string) (bool, error) {
 	output, err := RunShellCommand(t, "gcloud",
 		"compute", "instances", "describe", instanceName,
 		"--project", projectID,
@@ -351,6 +349,11 @@ func VerifySpotInstance(t *testing.T, instanceName string) (bool, error) {
 		strings.Contains(output, `"provisioningModel": "SPOT"`)
 
 	return isSpot, nil
+}
+
+// VerifySpotInstanceWithDefaults 기본값으로 Spot 인스턴스 검증 (하위 호환성)
+func VerifySpotInstanceWithDefaults(t *testing.T, instanceName string) (bool, error) {
+	return VerifySpotInstance(t, instanceName, DefaultProjectID, DefaultZone)
 }
 
 // VerifyIAMLoggingPermission Logging 권한 검증

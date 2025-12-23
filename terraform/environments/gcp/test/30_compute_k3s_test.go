@@ -73,10 +73,14 @@ func TestComputeAndK3s(t *testing.T) {
 	})
 
 	// Spot Instance 검증 (Worker만 Spot)
+	// terraformOptions에서 project_id, zone 추출
+	projectID := terraformOptions.Vars["project_id"].(string)
+	zone := terraformOptions.Vars["zone"].(string)
+
 	t.Run("WorkerSpotInstance", func(t *testing.T) {
 		for i := 0; i < DefaultWorkerCount; i++ {
 			workerName := fmt.Sprintf("%s-worker-%d", clusterName, i+1)
-			testSpotInstanceConfig(t, workerName)
+			testSpotInstanceConfig(t, workerName, projectID, zone)
 		}
 	})
 
@@ -125,6 +129,7 @@ func TestComputeAndK3s(t *testing.T) {
 }
 
 // TestComputeIdempotency 멱등성 테스트
+// terraform.PlanExitCode를 사용하여 간결하게 검증
 func TestComputeIdempotency(t *testing.T) {
 	t.Parallel()
 
@@ -138,23 +143,23 @@ func TestComputeIdempotency(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 	t.Logf("첫 번째 Apply 완료 (클러스터: %s)", clusterName)
 
-	// 두 번째 Apply - 변경 사항 없어야 함 (멱등성)
-	_, err := terraform.InitAndApplyE(t, terraformOptions)
-	if err != nil {
-		t.Fatalf("멱등성 테스트 실패: 두 번째 Apply에서 오류 발생 - %v", err)
-	}
+	// 멱등성 검증: Plan 실행 후 변경 사항 없음 확인 (exit code 0)
+	// Exit codes: 0 = no changes, 1 = error, 2 = changes present
+	exitCode := terraform.PlanExitCode(t, terraformOptions)
 
-	// Plan으로 변경 사항 확인
-	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
-
-	// 변경 사항이 없어야 함
-	for _, change := range planStruct.RawPlan.ResourceChanges {
-		if len(change.Change.Actions) > 0 && change.Change.Actions[0] != "no-op" {
-			t.Logf("경고: 리소스 '%s'에 변경 사항 발생: %v", change.Address, change.Change.Actions)
+	if exitCode == 0 {
+		t.Log("멱등성 테스트 통과: 재적용 시 변경 사항 없음")
+	} else if exitCode == 2 {
+		// 변경 사항이 있는 경우 상세 정보 출력
+		planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
+		for _, change := range planStruct.RawPlan.ResourceChanges {
+			if len(change.Change.Actions) > 0 && change.Change.Actions[0] != "no-op" {
+				t.Errorf("멱등성 실패: 리소스 '%s'에 변경 발생 - %v", change.Address, change.Change.Actions)
+			}
 		}
+	} else {
+		t.Fatalf("멱등성 테스트 실패: Plan 실행 오류 (exit code: %d)", exitCode)
 	}
-
-	t.Log("멱등성 테스트 통과: 두 번째 Apply에서 변경 사항 없음")
 }
 
 // runGcloudComputeCommand gcloud compute 명령어 실행
@@ -201,10 +206,8 @@ func testInstanceSpec(t *testing.T, instanceName string, expectedMachineType str
 }
 
 // testSpotInstanceConfig Spot/Preemptible 인스턴스 설정 검증
-func testSpotInstanceConfig(t *testing.T, instanceName string) {
-	projectID := DefaultProjectID
-	zone := DefaultZone
-
+// projectID, zone을 인자로 받아 동적 환경 지원
+func testSpotInstanceConfig(t *testing.T, instanceName, projectID, zone string) {
 	output, err := runGcloudComputeCommand(t,
 		"compute", "instances", "describe", instanceName,
 		"--project", projectID,
