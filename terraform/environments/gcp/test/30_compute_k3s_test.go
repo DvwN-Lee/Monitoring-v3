@@ -25,8 +25,8 @@ type GCPInstance struct {
 	Status      string `json:"status"`
 	Zone        string `json:"zone"`
 	Disks       []struct {
-		Boot       bool  `json:"boot"`
-		DiskSizeGb int64 `json:"diskSizeGb"`
+		Boot       bool   `json:"boot"`
+		DiskSizeGb string `json:"diskSizeGb"`
 	} `json:"disks"`
 	Scheduling struct {
 		Preemptible       bool   `json:"preemptible"`
@@ -195,7 +195,9 @@ func testInstanceSpec(t *testing.T, instanceName string, expectedMachineType str
 	// Disk size 확인
 	for _, disk := range instance.Disks {
 		if disk.Boot {
-			assert.GreaterOrEqual(t, disk.DiskSizeGb, int64(expectedDiskSize), "Boot disk 크기가 예상보다 작습니다")
+			var diskSize int64
+			fmt.Sscanf(disk.DiskSizeGb, "%d", &diskSize)
+			assert.GreaterOrEqual(t, diskSize, int64(expectedDiskSize), "Boot disk 크기가 예상보다 작습니다")
 		}
 	}
 
