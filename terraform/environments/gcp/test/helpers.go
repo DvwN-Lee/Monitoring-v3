@@ -49,13 +49,71 @@ func GetTerraformDir() string {
 
 // GetDefaultTerraformOptions 기본 Terraform 옵션 반환
 func GetDefaultTerraformOptions(t *testing.T) *terraform.Options {
-	return &terraform.Options{
-		TerraformDir: GetTerraformDir(),
-		Vars:         GetTestTerraformVars(),
-		MaxRetries:   3,
+	opts := &terraform.Options{
+		TerraformDir:       GetTerraformDir(),
+		Vars:               GetTestTerraformVars(),
+		MaxRetries:         3,
 		TimeBetweenRetries: 5 * time.Second,
-		NoColor:      true,
+		NoColor:            true,
 	}
+
+	// 테스트 환경 IP를 SSH 허용 목록에 추가 (auto.tfvars 파일 생성)
+	// Terraform은 *.auto.tfvars 파일을 자동으로 로드함
+	if ip, err := GetCurrentPublicIP(); err == nil && ip != "" {
+		createSSHTfvars(t, ip)
+		t.Logf("테스트 환경 IP 추가: %s/32", ip)
+	}
+
+	return opts
+}
+
+// createSSHTfvars SSH 허용 CIDR을 위한 tfvars 파일 생성
+func createSSHTfvars(t *testing.T, ip string) string {
+	tfvarsContent := fmt.Sprintf(`ssh_allowed_cidrs = ["%s/32"]`, ip)
+	// Terraform 디렉터리에 절대 경로로 파일 생성
+	absPath, err := filepath.Abs(filepath.Join(GetTerraformDir(), "test-ssh.auto.tfvars"))
+	if err != nil {
+		t.Logf("절대 경로 변환 실패: %v", err)
+		return ""
+	}
+
+	err = os.WriteFile(absPath, []byte(tfvarsContent), 0644)
+	if err != nil {
+		t.Logf("tfvars 파일 생성 실패: %v", err)
+		return ""
+	}
+	t.Logf("tfvars 파일 생성: %s", absPath)
+	return absPath
+}
+
+// GetCurrentPublicIP 현재 공인 IP 조회
+func GetCurrentPublicIP() (string, error) {
+	// api.ipify.org 사용 (순수 IP만 반환)
+	req, err := http.NewRequest("GET", "https://api.ipify.org", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "text/plain")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	buf := make([]byte, 64)
+	n, err := resp.Body.Read(buf)
+	if err != nil && err.Error() != "EOF" {
+		return "", err
+	}
+
+	ip := strings.TrimSpace(string(buf[:n]))
+	// IP 형식 검증
+	if net.ParseIP(ip) == nil {
+		return "", fmt.Errorf("invalid IP format: %s", ip)
+	}
+	return ip, nil
 }
 
 // GetTestTerraformVars 테스트용 Terraform 변수 반환

@@ -82,3 +82,9 @@ variable "postgres_password" {
   type        = string
   sensitive   = true
 }
+
+variable "ssh_allowed_cidrs" {
+  description = "Additional CIDR blocks allowed for SSH access (besides IAP)"
+  type        = list(string)
+  default     = []
+}

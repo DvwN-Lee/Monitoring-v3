@@ -67,8 +67,8 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # IAP (Identity-Aware Proxy) range only for secure SSH access
-  source_ranges = ["35.235.240.0/20"]
+  # IAP (Identity-Aware Proxy) range + additional allowed CIDRs
+  source_ranges = concat(["35.235.240.0/20"], var.ssh_allowed_cidrs)
   target_tags   = ["k3s-node"]
 }
 
