@@ -6,9 +6,19 @@ output "vpc_id" {
   value       = google_compute_network.vpc.id
 }
 
+output "vpc_name" {
+  description = "VPC Network Name"
+  value       = google_compute_network.vpc.name
+}
+
 output "subnet_id" {
   description = "Subnet ID"
   value       = google_compute_subnetwork.subnet.id
+}
+
+output "subnet_name" {
+  description = "Subnet Name"
+  value       = google_compute_subnetwork.subnet.name
 }
 
 output "master_external_ip" {

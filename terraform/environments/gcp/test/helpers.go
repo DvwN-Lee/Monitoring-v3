@@ -118,19 +118,21 @@ func GetCurrentPublicIP() (string, error) {
 
 // GetTestTerraformVars 테스트용 Terraform 변수 반환
 func GetTestTerraformVars() map[string]interface{} {
+	homeDir, _ := os.UserHomeDir()
 	return map[string]interface{}{
-		"project_id":           DefaultProjectID,
-		"region":               DefaultRegion,
-		"zone":                 DefaultZone,
-		"cluster_name":         DefaultClusterName,
-		"worker_count":         DefaultWorkerCount,
-		"master_machine_type":  DefaultMasterMachineType,
-		"worker_machine_type":  DefaultWorkerMachineType,
-		"subnet_cidr":          DefaultSubnetCIDR,
-		"master_disk_size":     DefaultMasterDiskSize,
-		"worker_disk_size":     DefaultWorkerDiskSize,
-		"use_spot_for_workers": true,
-		"postgres_password":    TestPostgresPassword,
+		"project_id":             DefaultProjectID,
+		"region":                 DefaultRegion,
+		"zone":                   DefaultZone,
+		"cluster_name":           DefaultClusterName,
+		"worker_count":           DefaultWorkerCount,
+		"master_machine_type":    DefaultMasterMachineType,
+		"worker_machine_type":    DefaultWorkerMachineType,
+		"subnet_cidr":            DefaultSubnetCIDR,
+		"master_disk_size":       DefaultMasterDiskSize,
+		"worker_disk_size":       DefaultWorkerDiskSize,
+		"use_spot_for_workers":   true,
+		"postgres_password":      TestPostgresPassword,
+		"ssh_public_key_path":    filepath.Join(homeDir, ".ssh", "titanium-key.pub"),
 	}
 }
 

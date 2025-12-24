@@ -156,7 +156,7 @@ resource "google_compute_instance" "k3s_master" {
   }
 
   metadata = {
-    ssh-keys = "ubuntu:${file(var.ssh_public_key_path)}"
+    ssh-keys = "ubuntu:${file(pathexpand(var.ssh_public_key_path))}"
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-server.sh", {
@@ -209,7 +209,7 @@ resource "google_compute_instance" "k3s_worker" {
   }
 
   metadata = {
-    ssh-keys = "ubuntu:${file(var.ssh_public_key_path)}"
+    ssh-keys = "ubuntu:${file(pathexpand(var.ssh_public_key_path))}"
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-agent.sh", {

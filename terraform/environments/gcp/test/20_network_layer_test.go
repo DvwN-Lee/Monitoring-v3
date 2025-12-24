@@ -54,7 +54,7 @@ func TestNetworkLayer(t *testing.T) {
 		"google_compute_firewall.allow_ssh",
 		"google_compute_firewall.allow_k8s_api",
 		"google_compute_firewall.allow_internal",
-		"google_compute_firewall.allow_nodeport",
+		"google_compute_firewall.allow_dashboards",
 	}
 
 	// Cleanup
@@ -153,7 +153,9 @@ func testSubnetConfiguration(t *testing.T, subnetName string) {
 // testFirewallRule 특정 포트에 대한 Firewall 규칙 검증
 func testFirewallRule(t *testing.T, vpcName string, ruleSuffix string, expectedPort string) {
 	projectID := DefaultProjectID
-	firewallName := fmt.Sprintf("%s-%s", vpcName, ruleSuffix)
+	// VPC 이름에서 "-vpc" 제거하여 cluster_name 추출
+	clusterName := strings.TrimSuffix(vpcName, "-vpc")
+	firewallName := fmt.Sprintf("%s-%s", clusterName, ruleSuffix)
 
 	// gcloud compute firewall-rules describe
 	output, err := runGcloudCommand(t,
@@ -185,7 +187,9 @@ func testFirewallRule(t *testing.T, vpcName string, ruleSuffix string, expectedP
 // testFirewallInternalRule 내부 통신 Firewall 규칙 검증
 func testFirewallInternalRule(t *testing.T, vpcName string) {
 	projectID := DefaultProjectID
-	firewallName := fmt.Sprintf("%s-allow-internal", vpcName)
+	// VPC 이름에서 "-vpc" 제거하여 cluster_name 추출
+	clusterName := strings.TrimSuffix(vpcName, "-vpc")
+	firewallName := fmt.Sprintf("%s-allow-internal", clusterName)
 
 	// gcloud compute firewall-rules describe
 	output, err := runGcloudCommand(t,
