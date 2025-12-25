@@ -1,6 +1,18 @@
-# Terratest for GCP k3s Monitoring Stack
+# Terratest for GCP K3s Monitoring Stack
 
-이 디렉토리는 GCP k3s infrastructure와 monitoring stack의 자동화된 테스트를 포함합니다.
+GCP K3s infrastructure와 monitoring stack의 자동화된 테스트 프레임워크입니다.
+
+## 테스트 아키텍처
+
+Bottom-Up 레이어 접근 방식으로 빠른 피드백과 비용 효율성을 제공합니다.
+
+| Layer | 테스트 | 비용 | 시간 | 목적 |
+|-------|--------|------|------|------|
+| 0 | Static Validation | $0 | <1분 | Format & Syntax 검증 |
+| 1 | Plan Unit Tests | $0 | <3분 | Plan 분석, 리소스 구성 검증 |
+| 2 | Network Layer | 낮음 | <5분 | VPC/Subnet/Firewall 검증 |
+| 3 | Compute & K3s | 중간 | 5-6분 | VM, SSH, K3s, 멱등성 검증 |
+| 4 | Full Integration | 높음 | 6분 | E2E, ArgoCD, Monitoring |
 
 ## 사전 요구사항
 
@@ -13,7 +25,7 @@ brew install go
 go version  # go1.21 이상 권장
 ```
 
-### 2. GCP 인증 설정
+### 2. GCP 인증
 ```bash
 # GCP 인증
 gcloud auth application-default login
@@ -22,115 +34,236 @@ gcloud auth application-default login
 gcloud config set project titanium-k3s-1765951764
 ```
 
-### 3. 환경 변수 설정
+### 3. SSH 키 설정
+```bash
+# 테스트에서 사용하는 SSH 키 생성 (없는 경우)
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/titanium-key -C "titanium-k3s-cluster"
+```
+
+### 4. 환경 변수
 ```bash
 export GOOGLE_PROJECT="titanium-k3s-1765951764"
 export GOOGLE_REGION="asia-northeast3"
 export GOOGLE_ZONE="asia-northeast3-a"
 ```
 
-## 테스트 종류
+## 빠른 시작
 
-### 1. Basic Unit Tests (빠른 검증)
-- Terraform 구문 검증
-- Variable validation
-- Plan 생성 테스트
-- **실제 리소스 생성 없음**
-
+### 전체 테스트 실행 (권장)
 ```bash
 cd test
+
+# 의존성 설치
 go mod download
-go test -v -run TestTerraformBasicValidation -timeout 10m
+
+# Layer 0-1: Static Validation & Plan Unit (비용 없음)
+go test -v -run "TestTerraform|TestPlan" -timeout 10m
+
+# Layer 3: Compute & K3s + 멱등성 (약 6분)
+go test -v -run "TestComputeAndK3s|TestComputeIdempotency" -timeout 30m
+
+# Layer 4: Full Integration (약 6분)
+go test -v -run "TestFullIntegration" -timeout 45m
 ```
 
-### 2. Integration Tests (실제 배포)
-- 실제 GCP 리소스 생성
-- k3s cluster 배포 및 검증
-- ArgoCD applications 검증
-- Monitoring stack 검증
-- **Grafana datasource 충돌 검증**
-- 테스트 후 자동 cleanup
+### 멱등성만 빠르게 검증
+```bash
+go test -v -run "TestComputeIdempotency" -timeout 30m
+```
 
-**주의**: 이 테스트는 실제 GCP 리소스를 생성하므로 비용이 발생합니다 (약 $0.5~$1 per test run).
+## 테스트 상세 설명
+
+### Layer 0: Static Validation
+
+비용 없이 빠르게 Terraform 코드 품질을 검증합니다.
+
+**포함된 테스트:**
+- `TestTerraformFormat`: 코드 포맷팅 검사 (`terraform fmt -check`)
+- `TestTerraformValidate`: 구문 유효성 검사
 
 ```bash
-cd test
-go test -v -run TestTerraformGCPDeployment -timeout 30m
+go test -v -run "TestTerraform" -timeout 5m
 ```
 
-## 테스트 실행 순서 (권장)
+**실행 시간**: <1분
+**비용**: $0
 
-### 1단계: 의존성 설치
+---
+
+### Layer 1: Plan Unit Tests
+
+실제 리소스 생성 없이 Terraform Plan을 분석하여 구성을 검증합니다.
+
+**포함된 테스트:**
+- `TestPlanResourceCount`: 리소스 개수 검증 (14개)
+- `TestPlanNetworkConfig`: VPC/Subnet CIDR 검증
+- `TestPlanComputeConfig`: Master/Worker 사양 검증
+- `TestPlanFirewallRules`: 필수 Firewall 규칙 검증
+- `TestPlanOutputDefinitions`: 필수 Output 정의 검증
+- `TestPlanNoSensitiveHardcoding`: 민감정보 하드코딩 방지
+- `TestPlanInvalidInputs`: Negative 테스트 (잘못된 입력)
+- `TestPlanFirewallSourceRanges`: SSH IAP 제한 검증
+- `TestPlanFirewallNoWideOpen`: 0.0.0.0/0 개방 경고
+
 ```bash
-cd test
-go mod download
+go test -v -run "TestPlan" -timeout 5m
 ```
 
-### 2단계: Basic Tests 실행
+**실행 시간**: <3분
+**비용**: $0
+
+---
+
+### Layer 2: Network Layer Tests
+
+VPC, Subnet, Firewall 리소스를 실제 생성하여 검증합니다.
+
 ```bash
-# 빠른 검증 (비용 없음)
-go test -v -run TestTerraformBasicValidation -timeout 10m
-go test -v -run TestTerraformOutputs -timeout 5m
+go test -v -run "TestNetwork" -timeout 15m
 ```
 
-### 3단계: Integration Tests 실행 (선택적)
+**실행 시간**: <5분
+**비용**: 낮음 (~$0.1)
+
+---
+
+### Layer 3: Compute & K3s Tests
+
+VM 생성, SSH 연결, K3s 클러스터 배포를 검증합니다.
+
+**TestComputeAndK3s:**
+- Master/Worker 인스턴스 사양 검증
+- Spot 인스턴스 구성 확인
+- SSH 연결성 테스트
+- K3s 서비스 상태 확인
+- K3s 노드 Ready 상태 검증
+- 시스템 Pod (CoreDNS, Metrics Server) 검증
+- IAM 권한 (Logging/Monitoring) 검증
+
+**TestComputeIdempotency (멱등성 검증):**
+- 첫 번째 `terraform apply` 실행
+- 두 번째 `terraform plan` 실행
+- Exit code 0 확인 (변경 사항 없음)
+- 멱등성 보장 검증
+
 ```bash
-# 실제 배포 테스트 (비용 발생)
-# 주의: 약 20-30분 소요
-go test -v -run TestTerraformGCPDeployment -timeout 30m
+# 전체 Compute Layer 테스트
+go test -v -run "TestCompute" -timeout 30m
+
+# 멱등성만 테스트
+go test -v -run "TestComputeIdempotency" -timeout 30m
 ```
 
-## 테스트 세부 설명
+**실행 시간**: 5-6분
+**비용**: 중간 (~$0.3-$0.5)
 
-### TestTerraformBasicValidation
-- Terraform init 검증
-- Terraform validate 검증
-- Terraform plan 생성 검증
-- 실행 시간: ~2분
-- 비용: 없음
+**멱등성 검증 결과 예시:**
+```
+TestComputeIdempotency 2025-12-24T22:33:47+09:00 logger.go:66:
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
 
-### TestTerraformOutputs
-- Output 변수 정의 검증
-- 실행 시간: <1분
-- 비용: 없음
+멱등성 테스트 통과: 재적용 시 변경 사항 없음
+--- PASS: TestComputeIdempotency (276.67s)
+```
 
-### TestTerraformGCPDeployment (Integration Test)
-전체 infrastructure lifecycle 테스트:
+---
 
-1. **Infrastructure 생성** (~5분)
-   - VPC, Subnet, Firewall 생성
-   - Compute Instances 생성 (Master + Worker)
-   - Static IP 할당
+### Layer 4: Full Integration Tests
 
-2. **k3s Cluster 검증** (~5분)
-   - Bootstrap script 완료 대기
-   - Node 상태 확인 (Ready)
-   - Kubernetes API 접근성 확인
+전체 스택 (Infrastructure + K3s + ArgoCD + Monitoring)을 E2E로 검증합니다.
 
-3. **ArgoCD Applications 검증** (~5분)
-   - 7개 Applications 생성 확인
-   - Health status 검증 (Healthy/Progressing)
+**검증 항목:**
+- Infrastructure Outputs (VPC, Subnet, IP 등)
+- Kubeconfig Access
+- Namespace Setup (argocd, monitoring, istio-system 등)
+- ArgoCD Applications (7개 앱 배포 상태)
+- Monitoring Stack (Prometheus, Grafana, Loki)
+- Application Endpoints (HTTP 접근성)
 
-4. **Monitoring Stack 검증** (~5분)
-   - 모든 pods Running 상태 확인
-   - Prometheus, Grafana, Loki, Istio, Kiali 검증
+```bash
+go test -v -run "TestFullIntegration" -timeout 45m
+```
 
-5. **Grafana Datasource 검증** (중요)
-   - Grafana pod restart count = 0 확인
-   - Datasource 충돌 에러 없음 확인
-   - Datasource sidecar ConfigMap 미생성 확인
+**실행 시간**: 6분
+**비용**: 높음 (~$0.5-$1)
 
-6. **Cleanup** (~5분)
-   - 모든 리소스 자동 삭제 (terraform destroy)
+---
 
-실행 시간: ~20-30분
-비용: ~$0.5-$1
+## 병렬 테스트 실행
+
+테스트는 기본적으로 격리된 환경에서 병렬 실행됩니다.
+
+**격리 메커니즘:**
+- `GetIsolatedTerraformOptions()`: 임시 디렉터리 + 랜덤 클러스터명
+- 각 테스트가 독립적인 Terraform state 사용
+- 리소스 이름 충돌 방지 (예: `tt-abc123-vpc`)
+
+```bash
+# 여러 테스트를 동시 실행
+go test -v -run "TestCompute|TestPlan" -timeout 30m -parallel 4
+```
+
+---
+
+## 테스트 결과 해석
+
+### 성공 케이스
+```
+=== RUN   TestComputeIdempotency
+TestComputeIdempotency 2025-12-24T22:33:47+09:00 logger.go:66:
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+
+    30_compute_k3s_test.go:151: 멱등성 테스트 통과: 재적용 시 변경 사항 없음
+--- PASS: TestComputeIdempotency (276.67s)
+PASS
+ok      github.com/DvwN-Lee/Monitoring-v2/terraform/environments/gcp/test      321.946s
+```
+
+### 실패 케이스 예시
+```
+--- FAIL: TestComputeAndK3s/MasterInstanceSpec (1.00s)
+    30_compute_k3s_test.go:190:
+        Error: json: cannot unmarshal string into Go struct field .disks.diskSizeGb of type int64
+        Test: TestComputeAndK3s/MasterInstanceSpec
+        Messages: Instance JSON 파싱 실패
+```
+
+---
+
+## Troubleshooting
+
+자세한 문제 해결 가이드는 [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)를 참조하세요.
+
+### 빠른 해결책
+
+**테스트 실패 시:**
+```bash
+# 로그 확인
+tail -100 /tmp/phase*-test.log
+
+# 수동 cleanup
+cd /Users/idongju/Desktop/Git/Monitoring-v3/terraform/environments/gcp
+terraform destroy -auto-approve
+```
+
+**GCP 리소스 정리:**
+```bash
+# 남아있는 테스트 리소스 확인
+gcloud compute instances list --filter="name~^tt-"
+gcloud compute networks list --filter="name~^tt-"
+
+# 수동 삭제
+gcloud compute instances delete INSTANCE_NAME --zone=asia-northeast3-a --quiet
+```
+
+---
 
 ## CI/CD 통합
 
 ### GitHub Actions 예제
 
-`.github/workflows/terratest.yml`:
 ```yaml
 name: Terratest
 
@@ -139,112 +272,85 @@ on:
     paths:
       - 'terraform/environments/gcp/**'
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  terratest-basic:
+  static-validation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      - name: Run Basic Tests
+      - name: Static Validation
         working-directory: terraform/environments/gcp/test
         run: |
           go mod download
-          go test -v -run TestTerraformBasicValidation -timeout 10m
+          go test -v -run "TestTerraform|TestPlan" -timeout 10m
 
-  terratest-integration:
+  idempotency-test:
     runs-on: ubuntu-latest
-    # Integration test는 main branch merge 후에만 실행
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      - uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Run Integration Tests
+      - name: Idempotency Test
         working-directory: terraform/environments/gcp/test
         run: |
           go mod download
-          go test -v -run TestTerraformGCPDeployment -timeout 30m
+          go test -v -run "TestComputeIdempotency" -timeout 30m
 ```
 
-## 테스트 결과 해석
-
-### 성공 케이스
-```
-=== RUN   TestTerraformGCPDeployment
-=== RUN   TestTerraformGCPDeployment/VerifyInfrastructure
-=== RUN   TestTerraformGCPDeployment/VerifyK3sCluster
-=== RUN   TestTerraformGCPDeployment/VerifyArgoCDApplications
-=== RUN   TestTerraformGCPDeployment/VerifyMonitoringStack
-=== RUN   TestTerraformGCPDeployment/VerifyGrafanaDatasource
-    terraform_integration_test.go:XXX: ✓ Grafana datasource configuration is correct (no conflicts)
---- PASS: TestTerraformGCPDeployment (1234.56s)
-PASS
-```
-
-### 실패 케이스 예제
-```
---- FAIL: TestTerraformGCPDeployment/VerifyGrafanaDatasource (45.67s)
-    terraform_integration_test.go:XXX: Grafana pod has restarted 3 times
-    terraform_integration_test.go:XXX: Error Trace: ...
-    terraform_integration_test.go:XXX: Error: Grafana should not have datasource conflict error
-    terraform_integration_test.go:XXX: Messages: Found error in logs: "Only one datasource per organization can be marked as default"
-```
-
-## Troubleshooting
-
-### 문제: "kubectl: command not found"
-```bash
-# macOS
-brew install kubectl
-```
-
-### 문제: "kubeconfig not found"
-```bash
-# Master node에서 kubeconfig 가져오기
-gcloud compute ssh titanium-k3s-master --zone=asia-northeast3-a --tunnel-through-iap \
-  --command="sudo cat /etc/rancher/k3s/k3s.yaml" | \
-  sed "s/127.0.0.1/<MASTER_IP>/g" > ~/.kube/config-gcp
-```
-
-### 문제: "timeout waiting for pods"
-- Bootstrap script 실행 시간이 예상보다 길 수 있음
-- Test timeout 값을 늘려보기: `-timeout 45m`
-
-### 문제: "terraform destroy failed"
-```bash
-# 수동으로 cleanup
-cd ../
-terraform destroy -auto-approve
-```
+---
 
 ## 비용 최적화
 
-### Integration Test 실행 빈도 제한
-- PR마다 실행하지 말고, main branch merge 후에만 실행
-- 또는 매일 1회 scheduled test 실행
+### 전략
+1. **PR마다 Layer 0-1만 실행** (비용 없음)
+2. **Main branch merge 시 Layer 3-4 실행**
+3. **매일 1회 Full Integration 실행** (Scheduled)
 
-### Spot VM 사용 (Worker Node)
-현재 설정에서 worker node는 이미 spot VM을 사용하므로 비용이 저렴합니다.
+### 예상 비용
+- Layer 0-1: $0
+- Layer 2: ~$0.1
+- Layer 3: ~$0.3-$0.5
+- Layer 4: ~$0.5-$1
 
-### Test 환경 별도 관리
-- Production 프로젝트와 분리된 test 전용 GCP 프로젝트 사용 권장
+**월간 예상 비용** (Main merge 시만 실행):
+- 주 5회 merge × Layer 3-4 실행: ~$15-20/월
+
+---
+
+## 테스트 파일 구조
+
+```
+test/
+├── 00_static_validation_test.go    # Layer 0
+├── 10_plan_unit_test.go            # Layer 1
+├── 20_network_layer_test.go        # Layer 2
+├── 30_compute_k3s_test.go          # Layer 3 (멱등성 포함)
+├── 40_full_integration_test.go     # Layer 4
+├── helpers.go                       # 공통 헬퍼 함수
+├── ssh_helpers.go                   # SSH 관련 헬퍼
+├── go.mod
+├── go.sum
+├── README.md                        # 이 문서
+└── TROUBLESHOOTING.md               # 문제 해결 가이드
+```
+
+---
 
 ## 참고 자료
 
 - [Terratest 공식 문서](https://terratest.gruntwork.io/)
-- [Terratest GCP Examples](https://github.com/gruntwork-io/terratest/tree/master/examples)
-- [Terraform Testing Best Practices](https://www.terraform.io/docs/cloud/guides/testing.html)
+- [Terraform Testing Best Practices](https://developer.hashicorp.com/terraform/tutorials/configuration-language/test)
+- [GCP Compute Engine API](https://cloud.google.com/compute/docs/reference/rest/v1)
+- [K3s 공식 문서](https://docs.k3s.io/)
