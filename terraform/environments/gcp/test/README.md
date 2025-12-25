@@ -343,7 +343,8 @@ test/
 ├── go.mod
 ├── go.sum
 ├── README.md                        # 이 문서
-└── TROUBLESHOOTING.md               # 문제 해결 가이드
+├── TROUBLESHOOTING.md               # 문제 해결 가이드
+└── CHANGELOG.md                     # 개발 히스토리
 ```
 
 ---
