@@ -4,17 +4,22 @@ Terratest 실행 중 발생할 수 있는 문제와 해결 방법을 정리한 �
 
 ## 목차
 
-1. [JSON 파싱 에러](#1-json-파싱-에러)
-2. [SSH 키 경로 문제](#2-ssh-키-경로-문제)
-3. [Service Account 충돌](#3-service-account-충돌)
-4. [Firewall Source Ranges 테스트 실패](#4-firewall-source-ranges-테스트-실패)
-5. [Network Layer 테스트 문제](#5-network-layer-테스트-문제)
-6. [테스트 Timeout](#6-테스트-timeout)
-7. [리소스 정리 실패](#7-리소스-정리-실패)
+1. [JSON 파싱 에러](#1-json-파싱-에러) - **[가끔 발생]**
+2. [SSH 키 경로 문제](#2-ssh-키-경로-문제) - **[자주 발생]**
+3. [Service Account 충돌](#3-service-account-충돌) - **[가끔 발생]**
+4. [Firewall Source Ranges 테스트 실패](#4-firewall-source-ranges-테스트-실패) - **[가끔 발생]**
+5. [Network Layer 테스트 문제](#5-network-layer-테스트-문제) - **[가끔 발생]**
+6. [테스트 Timeout](#6-테스트-timeout) - **[드물게 발생]**
+7. [리소스 정리 실패](#7-리소스-정리-실패) - **[가끔 발생]**
+
+**빈도 범례:**
+- **[자주 발생]**: 초기 설정이나 환경 구성 시 자주 마주치는 문제
+- **[가끔 발생]**: 특정 조건이나 실수 시 발생하는 문제
+- **[드물게 발생]**: 외부 요인이나 예외적인 상황에서만 발생하는 문제
 
 ---
 
-## 1. JSON 파싱 에러
+## 1. JSON 파싱 에러 **[가끔 발생]**
 
 ### 문제
 ```
@@ -70,7 +75,7 @@ go test -v -run "TestComputeAndK3s" -timeout 30m
 
 ---
 
-## 2. SSH 키 경로 문제
+## 2. SSH 키 경로 문제 **[자주 발생]**
 
 ### 문제 1: Tilde (~) 확장 실패
 
@@ -142,7 +147,7 @@ func GetTestTerraformVars() map[string]interface{} {
 
 ---
 
-## 3. Service Account 충돌
+## 3. Service Account 충돌 **[가끔 발생]**
 
 ### 문제
 ```
@@ -182,7 +187,7 @@ go test -v -run "TestFullIntegration" -timeout 45m
 
 ---
 
-## 4. Firewall Source Ranges 테스트 실패
+## 4. Firewall Source Ranges 테스트 실패 **[가끔 발생]**
 
 ### 문제
 ```
@@ -220,7 +225,7 @@ test-ssh.auto.tfvars
 
 ---
 
-## 5. Network Layer 테스트 문제
+## 5. Network Layer 테스트 문제 **[가끔 발생]**
 
 ### 문제 1: VPC 이미 존재
 
@@ -269,7 +274,7 @@ func testFirewallRule(t *testing.T, vpcName string, ruleSuffix string, expectedP
 
 ---
 
-## 6. 테스트 Timeout
+## 6. 테스트 Timeout **[드물게 발생]**
 
 ### 문제
 ```
@@ -301,7 +306,7 @@ sleepBetweenRetries := 10 * time.Second  // 총 10분 대기
 
 ---
 
-## 7. 리소스 정리 실패
+## 7. 리소스 정리 실패 **[가끔 발생]**
 
 ### 문제
 테스트 실패 후 GCP 리소스가 남아있음

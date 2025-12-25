@@ -47,6 +47,42 @@ export GOOGLE_REGION="asia-northeast3"
 export GOOGLE_ZONE="asia-northeast3-a"
 ```
 
+---
+
+## 환경별 차이점
+
+### macOS
+- SSH 키 생성: `ssh-keygen` 기본 제공
+- Go 설치: `brew install go` 권장
+- gcloud CLI: `brew install --cask google-cloud-sdk`
+
+### Linux (Ubuntu/Debian)
+- SSH 키 생성: `ssh-keygen` 기본 제공
+- Go 설치:
+  ```bash
+  sudo apt update
+  sudo apt install golang-go
+  ```
+- gcloud CLI:
+  ```bash
+  curl https://sdk.cloud.google.com | bash
+  exec -l $SHELL
+  ```
+
+### Windows
+- SSH 키 생성: Git Bash 또는 PowerShell 사용
+  ```powershell
+  ssh-keygen -t rsa -b 4096 -f $env:USERPROFILE\.ssh\titanium-key
+  ```
+- Go 설치: [공식 다운로드](https://go.dev/dl/)에서 MSI 설치
+- gcloud CLI: [Windows 설치 프로그램](https://cloud.google.com/sdk/docs/install#windows) 사용
+- **주의사항**:
+  - 경로 구분자: `\` 대신 `/` 또는 `\\` 사용
+  - 환경 변수 설정: `set` 또는 `$env:` 사용
+  - PowerShell에서 테스트 실행 권장
+
+---
+
 ## 빠른 시작
 
 ### 전체 테스트 실행 (권장)
@@ -118,8 +154,33 @@ go test -v -run "TestPlan" -timeout 5m
 
 VPC, Subnet, Firewall 리소스를 실제 생성하여 검증합니다.
 
+**포함된 테스트:**
+- `TestNetworkLayerVPC`: VPC 생성 및 구성 검증
+- `TestNetworkLayerSubnet`: Subnet CIDR 범위 검증
+- `TestNetworkLayerFirewall`: Firewall 규칙 생성 확인
+
+**검증 항목:**
+- VPC 이름 및 라우팅 모드 확인
+- Subnet CIDR 범위 (`10.0.0.0/24`) 검증
+- 필수 Firewall 규칙 존재 확인:
+  - `allow-ssh`: SSH 접근 (Port 22, IAP 범위)
+  - `allow-k3s`: K3s API (Port 6443)
+  - `allow-http`: HTTP (Port 80)
+  - `allow-https`: HTTPS (Port 443)
+  - `allow-internal`: 내부 통신 (모든 프로토콜)
+
 ```bash
 go test -v -run "TestNetwork" -timeout 15m
+```
+
+**실행 예시 출력:**
+```
+=== RUN   TestNetworkLayerVPC
+--- PASS: TestNetworkLayerVPC (45.23s)
+=== RUN   TestNetworkLayerSubnet
+--- PASS: TestNetworkLayerSubnet (2.11s)
+=== RUN   TestNetworkLayerFirewall
+--- PASS: TestNetworkLayerFirewall (12.34s)
 ```
 
 **실행 시간**: <5분
