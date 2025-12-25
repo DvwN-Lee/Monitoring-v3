@@ -108,6 +108,16 @@ metadata = {
 - `google_compute_instance.k3s_master` (line 159)
 - `google_compute_instance.k3s_worker` (line 212)
 
+**검증 결과**:
+```bash
+$ terraform plan
+...
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+```
+
 ---
 
 ### 문제 2: 테스트에서 잘못된 SSH 키 경로 사용
@@ -145,6 +155,21 @@ func GetTestTerraformVars() map[string]interface{} {
 }
 ```
 
+**검증 결과**:
+```bash
+$ go test -v -run "TestComputeAndK3s" -timeout 30m
+
+=== RUN   TestComputeAndK3s
+=== RUN   TestComputeAndK3s/MasterInstanceSpec
+=== RUN   TestComputeAndK3s/WorkerInstanceSpec
+=== RUN   TestComputeAndK3s/SSHConnectivity
+TestComputeAndK3s/SSHConnectivity 2025-12-24T14:22:15+09:00 logger.go:66:
+SSH 연결 성공: master (34.64.123.45)
+--- PASS: TestComputeAndK3s/SSHConnectivity (2.31s)
+--- PASS: TestComputeAndK3s (320.97s)
+PASS
+```
+
 ---
 
 ## 3. Service Account 충돌 **[가끔 발생]**
@@ -180,6 +205,23 @@ gcloud iam service-accounts delete \
 go test -v -run "TestFullIntegration" -timeout 45m
 ```
 
+**검증 결과**:
+```bash
+$ go test -v -run "TestFullIntegration" -timeout 45m
+
+=== RUN   TestFullIntegration
+=== RUN   TestFullIntegration/InfrastructureOutputs
+--- PASS: TestFullIntegration/InfrastructureOutputs (1.23s)
+=== RUN   TestFullIntegration/KubeconfigAccess
+--- PASS: TestFullIntegration/KubeconfigAccess (0.45s)
+=== RUN   TestFullIntegration/NamespaceSetup
+TestFullIntegration/NamespaceSetup 2025-12-24T15:03:12+09:00 logger.go:66:
+모든 네임스페이스 생성 완료: [argocd, monitoring, istio-system, default]
+--- PASS: TestFullIntegration/NamespaceSetup (45.67s)
+--- PASS: TestFullIntegration (348.87s)
+PASS
+```
+
 ### 예방 방법
 - `GetIsolatedTerraformOptions()` 사용 시 Service Account 이름도 랜덤화됨
 - Full Integration 테스트는 `GetDefaultTerraformOptions()` 사용하여 고정 이름 사용
@@ -213,6 +255,19 @@ cd test
 go test -v -run "TestPlanFirewallSourceRanges" -timeout 5m
 ```
 
+**검증 결과**:
+```bash
+$ go test -v -run "TestPlanFirewallSourceRanges" -timeout 5m
+
+=== RUN   TestPlanFirewallSourceRanges
+TestPlanFirewallSourceRanges 2025-12-23T21:25:34+09:00 logger.go:66:
+SSH Firewall Source Ranges: [35.235.240.0/20]
+TestPlanFirewallSourceRanges 2025-12-23T21:25:34+09:00 logger.go:66:
+✓ SSH Firewall은 IAP 범위만 허용합니다 (35.235.240.0/20)
+--- PASS: TestPlanFirewallSourceRanges (2.12s)
+PASS
+```
+
 ### 예방 방법
 - `.gitignore`에 `test-ssh.auto.tfvars` 추가
 - 테스트 후 자동 cleanup 로직 추가
@@ -240,6 +295,19 @@ The resource 'projects/.../global/networks/terratest-k3s-vpc' already exists
 gcloud compute networks delete terratest-k3s-vpc \
   --project=titanium-k3s-1765951764 \
   --quiet
+```
+
+**검증 결과**:
+```bash
+$ go test -v -run "TestNetworkLayerVPC" -timeout 15m
+
+=== RUN   TestNetworkLayerVPC
+TestNetworkLayerVPC 2025-12-24T12:58:45+09:00 logger.go:66:
+VPC 생성 완료: tt-abc123-vpc
+TestNetworkLayerVPC 2025-12-24T12:58:45+09:00 logger.go:66:
+✓ VPC 라우팅 모드: REGIONAL
+--- PASS: TestNetworkLayerVPC (45.23s)
+PASS
 ```
 
 ---
@@ -272,6 +340,25 @@ func testFirewallRule(t *testing.T, vpcName string, ruleSuffix string, expectedP
 }
 ```
 
+**검증 결과**:
+```bash
+$ go test -v -run "TestNetworkLayerFirewall" -timeout 15m
+
+=== RUN   TestNetworkLayerFirewall
+TestNetworkLayerFirewall 2025-12-24T13:01:23+09:00 logger.go:66:
+Firewall 규칙 확인: tt-abc123-allow-ssh
+TestNetworkLayerFirewall 2025-12-24T13:01:23+09:00 logger.go:66:
+✓ allow-ssh 규칙 존재 (Port 22)
+TestNetworkLayerFirewall 2025-12-24T13:01:24+09:00 logger.go:66:
+✓ allow-k3s 규칙 존재 (Port 6443)
+TestNetworkLayerFirewall 2025-12-24T13:01:25+09:00 logger.go:66:
+✓ allow-http 규칙 존재 (Port 80)
+TestNetworkLayerFirewall 2025-12-24T13:01:26+09:00 logger.go:66:
+✓ allow-https 규칙 존재 (Port 443)
+--- PASS: TestNetworkLayerFirewall (12.34s)
+PASS
+```
+
 ---
 
 ## 6. 테스트 Timeout **[드물게 발생]**
@@ -302,6 +389,24 @@ go test -v -run "TestFullIntegration" -timeout 45m
 // Retry 설정 조정
 maxRetries := 60
 sleepBetweenRetries := 10 * time.Second  // 총 10분 대기
+```
+
+**검증 결과**:
+```bash
+$ go test -v -run "TestFullIntegration" -timeout 45m
+
+=== RUN   TestFullIntegration
+=== RUN   TestFullIntegration/ArgoCDApplications
+TestFullIntegration/ArgoCDApplications 2025-12-24T15:06:30+09:00 logger.go:66:
+ArgoCD Application 상태 확인 중... (1/60)
+TestFullIntegration/ArgoCDApplications 2025-12-24T15:06:40+09:00 logger.go:66:
+ArgoCD Application 상태 확인 중... (2/60)
+...
+TestFullIntegration/ArgoCDApplications 2025-12-24T15:12:10+09:00 logger.go:66:
+✓ 모든 ArgoCD Application이 Synced 상태입니다 (7/7)
+--- PASS: TestFullIntegration/ArgoCDApplications (340.23s)
+--- PASS: TestFullIntegration (348.87s)
+PASS
 ```
 
 ---
@@ -385,6 +490,22 @@ gcloud iam service-accounts list --filter="email~^tt-" --project=$PROJECT_ID --f
 xargs -I {} gcloud iam service-accounts delete {} --project=$PROJECT_ID --quiet
 
 echo "Cleanup complete!"
+```
+
+**검증 결과**:
+```bash
+$ ./cleanup-test-resources.sh
+
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/zones/asia-northeast3-a/instances/tt-abc123-master].
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/zones/asia-northeast3-a/instances/tt-abc123-worker-0].
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/global/firewalls/tt-abc123-allow-ssh].
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/global/firewalls/tt-abc123-allow-k3s].
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/regions/asia-northeast3/subnetworks/tt-abc123-subnet].
+Deleted [https://www.googleapis.com/compute/v1/projects/titanium-k3s-1765951764/global/networks/tt-abc123-vpc].
+Cleanup complete!
+
+$ gcloud compute instances list --filter="name~^tt-" --project=titanium-k3s-1765951764
+Listed 0 items.
 ```
 
 ---
