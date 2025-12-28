@@ -70,7 +70,7 @@ configMapGenerator:
     behavior: merge
     literals:
       - USE_POSTGRES=true
-      - POSTGRES_HOST=postgresql-service
+      - POSTGRES_HOST=prod-postgresql-service
       - POSTGRES_PORT=5432
       - POSTGRES_DB=titanium
       - API_GATEWAY_URL=http://prod-api-gateway-service:8000
