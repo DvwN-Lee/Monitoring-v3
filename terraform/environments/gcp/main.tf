@@ -81,7 +81,7 @@ resource "google_compute_firewall" "allow_k8s_api" {
     ports    = ["6443"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.allowed_admin_cidrs
   target_tags   = ["k3s-master"]
 }
 
@@ -94,7 +94,7 @@ resource "google_compute_firewall" "allow_dashboards" {
     ports    = ["80", "443", "30000-32767"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.allowed_admin_cidrs
   target_tags   = ["k3s-master", "k3s-worker"]
 }
 
@@ -138,6 +138,13 @@ resource "google_compute_instance" "k3s_master" {
   zone         = var.zone
 
   tags = ["k3s-master", "k3s-node"]
+
+  labels = {
+    environment = var.environment
+    project     = "titanium"
+    managed_by  = "terraform"
+    role        = "k3s-master"
+  }
 
   boot_disk {
     initialize_params {
@@ -190,6 +197,13 @@ resource "google_compute_instance" "k3s_worker" {
   zone         = var.zone
 
   tags = ["k3s-worker", "k3s-node"]
+
+  labels = {
+    environment = var.environment
+    project     = "titanium"
+    managed_by  = "terraform"
+    role        = "k3s-worker"
+  }
 
   boot_disk {
     initialize_params {

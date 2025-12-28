@@ -489,6 +489,13 @@ spec:
         maxDuration: 3m
 EOFAPP
 
+# Wait for Kiali to be deployed and patch service to NodePort
+log "Waiting for Kiali deployment..."
+kubectl wait --for=condition=Available deployment/kiali -n istio-system --timeout=300s || log "Warning: Kiali deployment not ready"
+log "Patching Kiali service to NodePort:31200..."
+kubectl patch svc kiali -n istio-system --type='json' \
+  -p='[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":31200}]' || log "Warning: Kiali service patch failed"
+
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:30080"
 log "Grafana UI: http://$PUBLIC_IP:31300 (admin/admin)"
