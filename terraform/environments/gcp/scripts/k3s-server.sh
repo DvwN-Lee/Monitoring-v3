@@ -368,6 +368,10 @@ spec:
                   resources:
                     requests:
                       storage: 10Gi
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorNamespaceSelector: {}
+            podMonitorNamespaceSelector: {}
           service:
             type: NodePort
             nodePort: 31090

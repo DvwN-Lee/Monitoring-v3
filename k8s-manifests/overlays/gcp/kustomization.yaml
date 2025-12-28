@@ -16,6 +16,12 @@ resources:
   - istio/peer-authentication.yaml
   - istio/peer-authentication-databases.yaml
   - istio/destination-rules.yaml
+  - istio/servicemonitors.yaml
+  # Monitoring resources (ServiceMonitors for Prometheus metrics collection)
+  - ../../monitoring/servicemonitor-api-gateway.yaml
+  - ../../monitoring/servicemonitor-user-service.yaml
+  - ../../monitoring/servicemonitor-blog-service.yaml
+  - ../../monitoring/servicemonitor-auth-service.yaml
 
 # Patches for GCP environment
 patches:
