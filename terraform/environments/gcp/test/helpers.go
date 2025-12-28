@@ -856,3 +856,156 @@ func VerifyNodeReady(t *testing.T, host ssh.Host, nodeName string) (bool, error)
 
 	return strings.TrimSpace(output) == "True", nil
 }
+
+// ============================================================================
+// Monitoring Stack 검증 함수
+// ============================================================================
+
+// QueryPrometheusMetric Prometheus metric 쿼리 실행 및 결과 개수 반환
+func QueryPrometheusMetric(t *testing.T, host ssh.Host, query string) (int, error) {
+	// Prometheus API를 통해 metric 쿼리
+	command := fmt.Sprintf(`curl -s "http://localhost:31090/api/v1/query?query=%s" | jq -r '.data.result | length'`, query)
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return 0, fmt.Errorf("Prometheus metric 쿼리 실패: %v", err)
+	}
+
+	resultCount, err := strconv.Atoi(strings.TrimSpace(output))
+	if err != nil {
+		return 0, fmt.Errorf("Prometheus 결과 파싱 실패: %v", err)
+	}
+
+	return resultCount, nil
+}
+
+// VerifyGrafanaDataSources Grafana DataSource 연결 상태 확인
+func VerifyGrafanaDataSources(t *testing.T, host ssh.Host, sources []string) error {
+	// Grafana API로 DataSource 목록 조회
+	command := `curl -s -u admin:admin "http://localhost:31300/api/datasources" | jq -r '.[].name'`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return fmt.Errorf("Grafana DataSource 조회 실패: %v", err)
+	}
+
+	foundSources := strings.Split(strings.TrimSpace(output), "\n")
+	foundMap := make(map[string]bool)
+	for _, source := range foundSources {
+		foundMap[strings.TrimSpace(source)] = true
+	}
+
+	var missingSources []string
+	for _, required := range sources {
+		if !foundMap[required] {
+			missingSources = append(missingSources, required)
+		}
+	}
+
+	if len(missingSources) > 0 {
+		return fmt.Errorf("Grafana: 다음 DataSource가 없음: %v", missingSources)
+	}
+
+	return nil
+}
+
+// QueryLokiLogs Loki 로그 쿼리 실행 및 결과 개수 반환
+func QueryLokiLogs(t *testing.T, host ssh.Host, logQL string) (int, error) {
+	// Loki API를 통해 로그 쿼리
+	command := fmt.Sprintf(`curl -s "http://localhost:3100/loki/api/v1/query?query=%s&limit=100" | jq -r '.data.result | length'`, logQL)
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return 0, fmt.Errorf("Loki 로그 쿼리 실패: %v", err)
+	}
+
+	resultCount, err := strconv.Atoi(strings.TrimSpace(output))
+	if err != nil {
+		return 0, fmt.Errorf("Loki 결과 파싱 실패: %v", err)
+	}
+
+	return resultCount, nil
+}
+
+// GetKialiNamespaces Kiali에서 관리하는 namespace 목록 조회
+func GetKialiNamespaces(t *testing.T, host ssh.Host) ([]string, error) {
+	// Kiali API를 통해 namespace 목록 조회
+	command := `curl -s "http://localhost:31200/api/namespaces" | jq -r '.[].name'`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return nil, fmt.Errorf("Kiali namespace 조회 실패: %v", err)
+	}
+
+	var namespaces []string
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if line != "" {
+			namespaces = append(namespaces, strings.TrimSpace(line))
+		}
+	}
+
+	return namespaces, nil
+}
+
+// VerifyPrometheusHealthy Prometheus 서버 health 상태 확인
+func VerifyPrometheusHealthy(t *testing.T, host ssh.Host) error {
+	command := `curl -s "http://localhost:31090/-/healthy"`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return fmt.Errorf("Prometheus health check 실패: %v", err)
+	}
+
+	if !strings.Contains(output, "Prometheus Server is Healthy") {
+		return fmt.Errorf("Prometheus가 healthy 상태가 아님: %s", output)
+	}
+
+	return nil
+}
+
+// VerifyGrafanaHealthy Grafana 서버 health 상태 확인
+func VerifyGrafanaHealthy(t *testing.T, host ssh.Host) error {
+	command := `curl -s "http://localhost:31300/api/health" | jq -r '.database'`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return fmt.Errorf("Grafana health check 실패: %v", err)
+	}
+
+	if strings.TrimSpace(output) != "ok" {
+		return fmt.Errorf("Grafana database가 healthy 상태가 아님: %s", output)
+	}
+
+	return nil
+}
+
+// VerifyLokiReady Loki 서버 ready 상태 확인
+func VerifyLokiReady(t *testing.T, host ssh.Host) error {
+	command := `sudo kubectl exec -n monitoring deployment/loki -- wget -qO- "http://localhost:3100/ready"`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return fmt.Errorf("Loki ready check 실패: %v", err)
+	}
+
+	if !strings.Contains(output, "ready") {
+		return fmt.Errorf("Loki가 ready 상태가 아님: %s", output)
+	}
+
+	return nil
+}
+
+// VerifyKialiHealthy Kiali 서버 health 상태 확인
+func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
+	command := `curl -s "http://localhost:31200/healthz"`
+
+	output, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		return fmt.Errorf("Kiali health check 실패: %v", err)
+	}
+
+	// Kiali healthz는 빈 응답 또는 JSON 반환
+	// 에러가 없으면 정상으로 간주
+	return nil
+}

@@ -88,3 +88,15 @@ variable "ssh_allowed_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "allowed_admin_cidrs" {
+  description = "CIDR blocks allowed for Kubernetes API and Dashboard access"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "environment" {
+  description = "Environment name (e.g., dev, staging, prod)"
+  type        = string
+  default     = "prod"
+}
