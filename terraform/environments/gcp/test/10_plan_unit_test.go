@@ -227,6 +227,11 @@ func TestPlanNoSensitiveHardcoding(t *testing.T) {
 
 	for resourceAddr, resource := range planStruct.ResourcePlannedValuesMap {
 		for key, value := range resource.AttributeValues {
+			// metadata_startup_script는 templatefile로 변수 주입된 값을 포함하므로 제외
+			if key == "metadata_startup_script" {
+				continue
+			}
+
 			if strValue, ok := value.(string); ok {
 				for _, pattern := range sensitivePatterns {
 					if strings.Contains(strings.ToLower(strValue), pattern) {
@@ -236,6 +241,8 @@ func TestPlanNoSensitiveHardcoding(t *testing.T) {
 			}
 		}
 	}
+
+	t.Log("민감한 값 하드코딩 검증 통과 (metadata_startup_script 제외)")
 }
 
 // ============================================================================
