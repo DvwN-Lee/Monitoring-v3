@@ -35,12 +35,12 @@ spec:
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: postgresql-secret
+              name: app-secrets
               key: POSTGRES_USER
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgresql-secret
+              name: app-secrets
               key: POSTGRES_PASSWORD
         - name: POSTGRES_SSLMODE
           valueFrom:
