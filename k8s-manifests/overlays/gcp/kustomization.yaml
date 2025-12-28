@@ -73,6 +73,7 @@ configMapGenerator:
       - POSTGRES_HOST=prod-postgresql-service
       - POSTGRES_PORT=5432
       - POSTGRES_DB=titanium
+      - POSTGRES_SSLMODE=disable
       - API_GATEWAY_URL=http://prod-api-gateway-service:8000
       - USER_SERVICE_URL=http://prod-user-service:8001
       - AUTH_SERVICE_URL=http://prod-auth-service:8002
