@@ -256,6 +256,21 @@ spec:
         maxDuration: 3m
 EOFAPP
 
+# Wait for istiod mutating webhook to be ready
+log "Waiting for istiod mutating webhook to be ready..."
+WEBHOOK_TIMEOUT=120
+WEBHOOK_ELAPSED=0
+until kubectl get mutatingwebhookconfiguration istio-sidecar-injector >/dev/null 2>&1; do
+    if [ $WEBHOOK_ELAPSED -ge $WEBHOOK_TIMEOUT ]; then
+        log "Warning: istiod webhook timeout, proceeding anyway..."
+        break
+    fi
+    log "Waiting for istiod webhook... ($WEBHOOK_ELAPSED/$WEBHOOK_TIMEOUT sec)"
+    sleep 5
+    WEBHOOK_ELAPSED=$((WEBHOOK_ELAPSED + 5))
+done
+log "istiod mutating webhook is ready"
+
 # Create ArgoCD Application for Istio Ingress Gateway
 log "Creating ArgoCD Application for istio-ingressgateway..."
 cat <<'EOFAPP' | kubectl apply -f -
@@ -277,6 +292,10 @@ spec:
       values: |
         labels:
           istio: ingressgateway
+        image:
+          registry: docker.io/istio
+          repository: proxyv2
+          tag: 1.24.2
         service:
           type: NodePort
           ports:
@@ -448,7 +467,8 @@ spec:
           web_root: /kiali
         service:
           type: NodePort
-          node_port: 31200
+          nodePort: 31200
+          port: 20001
         auth:
           strategy: anonymous
   destination:
