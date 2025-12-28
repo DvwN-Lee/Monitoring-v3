@@ -4,6 +4,10 @@ metadata:
   name: blog-service-deployment
 spec:
   template:
+    metadata:
+      annotations:
+        # Exclude PostgreSQL port from Istio proxy
+        traffic.sidecar.istio.io/excludeOutboundPorts: "5432"
     spec:
       containers:
       - name: blog-service-container
@@ -38,4 +42,9 @@ spec:
             secretKeyRef:
               name: postgresql-secret
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_SSLMODE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_SSLMODE
         # Remove BLOG_DATABASE_PATH (SQLite)
