@@ -22,8 +22,12 @@ resources:
   - istio/peer-authentication-databases.yaml
   - istio/destination-rules.yaml
   - istio/servicemonitors.yaml
-  # Monitoring resources (ServiceMonitors for Prometheus metrics collection)
-  - application-servicemonitors.yaml
+  # Application ServiceMonitors (currently disabled)
+  # Reason: Istio mTLS STRICT mode blocks Prometheus scraping from outside mesh
+  # Solution: Use Envoy proxy metrics (istio_requests_total) for now
+  # Future: Enable with TLS config when application custom metrics are needed
+  # Reference: https://istio.io/latest/docs/ops/integrations/prometheus/
+  # - application-servicemonitors.yaml
 
 # Patches for GCP environment
 patches:
