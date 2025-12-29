@@ -11,6 +11,8 @@ Terratest 실행 중 발생할 수 있는 문제와 해결 방법을 정리한 �
 5. [Network Layer 테스트 문제](#5-network-layer-테스트-문제) - **[가끔 발생]**
 6. [테스트 Timeout](#6-테스트-timeout) - **[드물게 발생]**
 7. [리소스 정리 실패](#7-리소스-정리-실패) - **[가끔 발생]**
+8. [k3s Node Password Rejection](#8-k3s-node-password-rejection) - **[가끔 발생]**
+9. [Regional MIG maxSurge 오류](#9-regional-mig-maxsurge-오류) - **[드물게 발생]**
 
 **빈도 범례:**
 - **[자주 발생]**: 초기 설정이나 환경 구성 시 자주 마주치는 문제
@@ -577,3 +579,115 @@ gcloud billing accounts list
    gcloud version
    ```
 4. **로그 파일**: `/tmp/phase*-test.log`
+
+---
+
+## 8. k3s Node Password Rejection **[가끔 발생]**
+
+### 문제
+```
+E0101 12:34:56.123456 12345 main.go:48] Node password rejected, duplicate hostname or contents of '/etc/rancher/node/password' may not match server node-passwd entry
+```
+
+### 원인
+MIG(Managed Instance Group)에서 Auto-healing이 동작하여 Worker VM이 재생성될 때, 기존과 동일한 hostname으로 k3s에 Join을 시도합니다. k3s server는 각 node의 password를 `/var/lib/rancher/k3s/server/cred/node-passwd`에 저장하므로, 동일 hostname에 다른 password로 접근하면 거부됩니다.
+
+### 해결 방법
+
+**파일**: `terraform/environments/gcp/scripts/k3s-agent.sh`
+
+```bash
+# Before (문제 코드)
+curl -sfL https://get.k3s.io | K3S_URL="https://${master_ip}:6443" K3S_TOKEN="${k3s_token}" sh -s -
+
+# After (수정 코드) - --with-node-id 플래그 추가
+curl -sfL https://get.k3s.io | K3S_URL="https://${master_ip}:6443" K3S_TOKEN="${k3s_token}" sh -s - --with-node-id
+```
+
+**동작 원리**:
+- `--with-node-id` 플래그는 node name에 instance ID를 자동으로 추가
+- 예: `titanium-k3s-worker-4fd0` -> `titanium-k3s-worker-4fd0-31f278b8`
+- 재생성 시 새로운 instance ID가 할당되어 node name 충돌 방지
+
+### 검증
+```bash
+# Worker node 목록 확인
+kubectl get nodes
+
+# 예상 출력 (각 worker에 고유 ID 포함)
+NAME                                  STATUS   ROLES    AGE
+titanium-k3s-master                   Ready    master   1h
+titanium-k3s-worker-4fd0-31f278b8     Ready    <none>   30m
+```
+
+### 참고
+- MIG Auto-healing 발생 시 기존 node는 자동으로 `NotReady` 상태가 되고, 새 node가 Join됩니다
+- 기존 node를 수동으로 삭제하려면: `kubectl delete node <old-node-name>`
+
+---
+
+## 9. Regional MIG maxSurge 오류 **[드물게 발생]**
+
+### 문제
+```
+Error: Error creating RegionInstanceGroupManager: googleapi: Error 400:
+Invalid value for field 'resource.updatePolicy.maxSurge.fixed': '1'.
+Max surge for regional managed instance group must be at least equal to the number of zones
+```
+
+### 원인
+Regional MIG(다중 Zone)를 사용할 때, `maxSurge` 값이 Zone 수보다 작으면 오류가 발생합니다. 예를 들어 3개 Zone을 사용하는 Regional MIG에서 `maxSurge=1`은 허용되지 않습니다.
+
+### 해결 방법
+
+**옵션 1: Zone MIG로 변경 (권장)**
+
+단일 Zone에서 운영하는 경우 Zone MIG를 사용합니다.
+
+```hcl
+# terraform/environments/gcp/mig.tf
+
+# Regional MIG (문제 발생)
+resource "google_compute_region_instance_group_manager" "k3s_workers" {
+  name   = "${var.cluster_name}-worker-mig"
+  region = var.region
+  # ...
+}
+
+# Zone MIG (해결)
+resource "google_compute_instance_group_manager" "k3s_workers" {
+  name = "${var.cluster_name}-worker-mig"
+  zone = var.zone  # 단일 Zone 지정
+  # ...
+}
+```
+
+**옵션 2: maxSurge 값 조정**
+
+Regional MIG를 유지해야 하는 경우, Zone 수 이상으로 `maxSurge`를 설정합니다.
+
+```hcl
+update_policy {
+  type                  = "PROACTIVE"
+  max_surge_fixed       = 3  # Zone 수 이상
+  max_unavailable_fixed = 0
+}
+```
+
+### 검증
+```bash
+# MIG 상태 확인
+gcloud compute instance-groups managed describe titanium-k3s-worker-mig \
+  --zone=asia-northeast3-a \
+  --project=YOUR_PROJECT_ID
+
+# 정상 출력 예시
+status:
+  isStable: true
+  versionTarget:
+    isReached: true
+```
+
+### 참고
+- Zone MIG: 단일 Zone에서 운영, 간단한 설정, 비용 효율적
+- Regional MIG: 다중 Zone에 분산 배포, 고가용성 필요 시 사용
