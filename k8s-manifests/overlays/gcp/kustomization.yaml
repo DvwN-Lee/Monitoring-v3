@@ -108,9 +108,9 @@ labels:
 # Images to use (updated with Docker Hub registry)
 images:
   - name: dongju101/user-service
-    newTag: feature-gcp-configuration
+    newTag: main-b1a60a7
   - name: dongju101/blog-service
-    newTag: feature-gcp-configuration
+    newTag: main-b1a60a7
   - name: dongju101/auth-service
     newTag: main-12744b6
   - name: dongju101/api-gateway
