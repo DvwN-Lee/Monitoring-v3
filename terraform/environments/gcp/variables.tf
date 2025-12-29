@@ -82,3 +82,21 @@ variable "postgres_password" {
   type        = string
   sensitive   = true
 }
+
+variable "ssh_allowed_cidrs" {
+  description = "Additional CIDR blocks allowed for SSH access (besides IAP)"
+  type        = list(string)
+  default     = []
+}
+
+variable "allowed_admin_cidrs" {
+  description = "CIDR blocks allowed for Kubernetes API and Dashboard access"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "environment" {
+  description = "Environment name (e.g., dev, staging, prod)"
+  type        = string
+  default     = "prod"
+}

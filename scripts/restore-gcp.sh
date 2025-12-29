@@ -1,6 +1,6 @@
 #!/bin/bash
-# Solid Cloud Cluster 데이터 복구 스크립트
-# 실행: ./scripts/restore-solid-cloud.sh <backup-directory>
+# GCP k3s Cluster 데이터 복구 스크립트
+# 실행: ./scripts/restore-gcp.sh <backup-directory>
 
 set -e
 
@@ -10,7 +10,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== Solid Cloud Cluster 복구 시작 ===${NC}"
+echo -e "${GREEN}=== GCP k3s Cluster 복구 시작 ===${NC}"
 echo ""
 
 # 인자 확인
@@ -19,10 +19,10 @@ if [ -z "$1" ]; then
     echo "사용법: $0 <backup-directory>"
     echo ""
     echo "예시:"
-    echo "  $0 ~/solid-cloud-backup/20250124"
+    echo "  $0 ~/gcp-k3s-backup/20250124"
     echo ""
     echo "가능한 백업 디렉토리:"
-    ls -d ~/solid-cloud-backup/*/ 2>/dev/null | head -5 || echo "  (백업 없음)"
+    ls -d ~/gcp-k3s-backup/*/ 2>/dev/null | head -5 || echo "  (백업 없음)"
     exit 1
 fi
 
@@ -62,8 +62,8 @@ export PG_POD=postgresql-0
 echo -e "${GREEN}[1/7] Cluster 연결 확인${NC}"
 if ! kubectl cluster-info &> /dev/null; then
     echo -e "${RED}ERROR: Kubernetes Cluster에 연결할 수 없습니다${NC}"
-    echo "먼저 새 Cluster에 연결하세요:"
-    echo "  ./scripts/switch-to-cloud.sh"
+    echo "먼저 GCP Cluster kubeconfig를 설정하세요:"
+    echo "  export KUBECONFIG=~/.kube/config-gcp"
     exit 1
 fi
 

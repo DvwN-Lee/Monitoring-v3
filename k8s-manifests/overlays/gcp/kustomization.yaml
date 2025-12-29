@@ -11,13 +11,25 @@ namePrefix: prod-
 resources:
   - ../../base
   - namespace.yaml
+  # PostgreSQL Resources
+  - postgres/configmap.yaml
+  - postgres/pvc.yaml
+  - postgres/service.yaml
+  - postgres/statefulset.yaml
   # Istio resources enabled (gateway.yaml includes VirtualService)
   - istio/gateway.yaml
   - istio/peer-authentication.yaml
   - istio/peer-authentication-databases.yaml
   - istio/destination-rules.yaml
+  - istio/servicemonitors.yaml
+  # Application ServiceMonitors (currently disabled)
+  # Reason: Istio mTLS STRICT mode blocks Prometheus scraping from outside mesh
+  # Solution: Use Envoy proxy metrics (istio_requests_total) for now
+  # Future: Enable with TLS config when application custom metrics are needed
+  # Reference: https://istio.io/latest/docs/ops/integrations/prometheus/
+  # - application-servicemonitors.yaml
 
-# Patches for Solid Cloud environment
+# Patches for GCP environment
 patches:
   # Secret은 Terraform kubernetes module에서 관리
 
@@ -62,9 +74,10 @@ configMapGenerator:
     behavior: merge
     literals:
       - USE_POSTGRES=true
-      - POSTGRES_HOST=postgresql-service
+      - POSTGRES_HOST=prod-postgresql-service
       - POSTGRES_PORT=5432
       - POSTGRES_DB=titanium
+      - POSTGRES_SSLMODE=disable
       - API_GATEWAY_URL=http://prod-api-gateway-service:8000
       - USER_SERVICE_URL=http://prod-user-service:8001
       - AUTH_SERVICE_URL=http://prod-auth-service:8002
@@ -95,9 +108,9 @@ labels:
 # Images to use (updated with Docker Hub registry)
 images:
   - name: dongju101/user-service
-    newTag: main-9820acf
+    newTag: feature-gcp-configuration
   - name: dongju101/blog-service
-    newTag: main-bf0a510
+    newTag: feature-gcp-configuration
   - name: dongju101/auth-service
     newTag: main-12744b6
   - name: dongju101/api-gateway

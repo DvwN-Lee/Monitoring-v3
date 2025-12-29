@@ -19,7 +19,7 @@ variable "argocd_namespace" {
 variable "git_repo_url" {
   description = "Git repository URL"
   type        = string
-  default     = "https://github.com/DvwN-Lee/Monitoring-v2.git"
+  default     = "https://github.com/DvwN-Lee/Monitoring-v3.git"
 }
 
 variable "git_revision" {
@@ -31,7 +31,7 @@ variable "git_revision" {
 variable "kubeconfig_path" {
   description = "Path to kubeconfig file"
   type        = string
-  default     = "~/.kube/config-solid-cloud"
+  default     = "~/.kube/config-gcp"
 }
 
 variable "depends_on_resources" {
@@ -59,7 +59,7 @@ resource "null_resource" "titanium_prod_app" {
         source:
           repoURL: ${var.git_repo_url}
           targetRevision: ${var.git_revision}
-          path: k8s-manifests/overlays/solid-cloud
+          path: k8s-manifests/overlays/gcp
         destination:
           server: https://kubernetes.default.svc
           namespace: titanium-prod
