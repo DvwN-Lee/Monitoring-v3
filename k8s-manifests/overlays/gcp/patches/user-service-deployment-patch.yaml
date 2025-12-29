@@ -4,6 +4,10 @@ metadata:
   name: user-service-deployment
 spec:
   template:
+    metadata:
+      annotations:
+        # Exclude PostgreSQL port from Istio proxy
+        traffic.sidecar.istio.io/excludeOutboundPorts: "5432"
     spec:
       containers:
       - name: user-service-container
@@ -38,6 +42,11 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_SSLMODE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_SSLMODE
         # Remove volumeMounts for SQLite
         volumeMounts: []
       # Remove volumes for SQLite PVC

@@ -67,8 +67,8 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # IAP (Identity-Aware Proxy) range only for secure SSH access
-  source_ranges = ["35.235.240.0/20"]
+  # IAP (Identity-Aware Proxy) range + additional allowed CIDRs
+  source_ranges = concat(["35.235.240.0/20"], var.ssh_allowed_cidrs)
   target_tags   = ["k3s-node"]
 }
 
@@ -81,7 +81,7 @@ resource "google_compute_firewall" "allow_k8s_api" {
     ports    = ["6443"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.allowed_admin_cidrs
   target_tags   = ["k3s-master"]
 }
 
@@ -94,7 +94,7 @@ resource "google_compute_firewall" "allow_dashboards" {
     ports    = ["80", "443", "30000-32767"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.allowed_admin_cidrs
   target_tags   = ["k3s-master", "k3s-worker"]
 }
 
@@ -139,6 +139,13 @@ resource "google_compute_instance" "k3s_master" {
 
   tags = ["k3s-master", "k3s-node"]
 
+  labels = {
+    environment = var.environment
+    project     = "titanium"
+    managed_by  = "terraform"
+    role        = "k3s-master"
+  }
+
   boot_disk {
     initialize_params {
       image = var.os_image
@@ -156,7 +163,7 @@ resource "google_compute_instance" "k3s_master" {
   }
 
   metadata = {
-    ssh-keys = "ubuntu:${file(var.ssh_public_key_path)}"
+    ssh-keys = "ubuntu:${file(pathexpand(var.ssh_public_key_path))}"
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-server.sh", {
@@ -175,6 +182,14 @@ resource "google_compute_instance" "k3s_master" {
     enable_integrity_monitoring = true
   }
 
+  # startup_script 변경으로 인한 Master 재생성 방지
+  lifecycle {
+    ignore_changes = [
+      metadata_startup_script,
+      labels
+    ]
+  }
+
   depends_on = [
     google_service_account.k3s_sa,
     google_project_iam_member.sa_logging,
@@ -182,64 +197,22 @@ resource "google_compute_instance" "k3s_master" {
   ]
 }
 
-# k3s Worker Nodes
-resource "google_compute_instance" "k3s_worker" {
-  count        = var.worker_count
-  name         = "${var.cluster_name}-worker-${count.index + 1}"
-  machine_type = var.worker_machine_type
-  zone         = var.zone
+# k3s Worker Nodes - MIG로 이전됨 (mig.tf 참조)
+# 기존 google_compute_instance.k3s_worker 리소스는 MIG(Managed Instance Group)로 대체
 
-  tags = ["k3s-worker", "k3s-node"]
+# Health Check 방화벽 규칙 (MIG Auto-healing용)
+resource "google_compute_firewall" "allow_health_check" {
+  name    = "${var.cluster_name}-allow-health-check"
+  network = google_compute_network.vpc.name
 
-  boot_disk {
-    initialize_params {
-      image = var.os_image
-      size  = var.worker_disk_size
-      type  = "pd-balanced"
-    }
+  allow {
+    protocol = "tcp"
+    ports    = ["10250"]
   }
 
-  network_interface {
-    subnetwork = google_compute_subnetwork.subnet.id
-
-    # Add ephemeral public IP (NAT 대신 사용)
-    access_config {
-      # Ephemeral IP will be auto-assigned
-    }
-  }
-
-  metadata = {
-    ssh-keys = "ubuntu:${file(var.ssh_public_key_path)}"
-  }
-
-  metadata_startup_script = templatefile("${path.module}/scripts/k3s-agent.sh", {
-    master_ip = google_compute_instance.k3s_master.network_interface[0].network_ip
-    k3s_token = random_password.k3s_token.result
-  })
-
-  service_account {
-    email  = google_service_account.k3s_sa.email
-    scopes = ["cloud-platform"]
-  }
-
-  shielded_instance_config {
-    enable_secure_boot          = true
-    enable_vtpm                 = true
-    enable_integrity_monitoring = true
-  }
-
-  # Spot (Preemptible) VM configuration
-  scheduling {
-    preemptible       = var.use_spot_for_workers
-    automatic_restart = !var.use_spot_for_workers
-  }
-
-  depends_on = [
-    google_compute_instance.k3s_master,
-    google_service_account.k3s_sa,
-    google_project_iam_member.sa_logging,
-    google_project_iam_member.sa_monitoring
-  ]
+  # GCP Health Check source IP ranges
+  source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
+  target_tags   = ["k3s-worker"]
 }
 
 # Create local kubeconfig template

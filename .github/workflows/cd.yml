@@ -73,7 +73,7 @@ jobs:
           echo "Updating image tags for services: $SERVICES"
 
           # kustomization.yaml 파일 경로
-          KUSTOMIZE_FILE="k8s-manifests/overlays/solid-cloud/kustomization.yaml"
+          KUSTOMIZE_FILE="k8s-manifests/overlays/gcp/kustomization.yaml"
 
           # 각 Service의 이미지 태그 업데이트
           for service in $SERVICES; do
@@ -104,7 +104,7 @@ jobs:
           fi
 
           # 변경사항 커밋
-          git add k8s-manifests/overlays/solid-cloud/kustomization.yaml
+          git add k8s-manifests/overlays/gcp/kustomization.yaml
 
           # 커밋 메시지 생성
           git commit -m "chore: Update image tags to main-${SHORT_SHA}
