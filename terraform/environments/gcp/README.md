@@ -6,7 +6,8 @@ Google Cloud Platform에서 k3s cluster와 ArgoCD를 완전 자동화로 배포�
 
 - **Provider**: Google Cloud Platform (GCP)
 - **Infrastructure**: VPC, Subnet, Firewall, Compute Engine instances
-- **Kubernetes**: k3s (1 master + 2 workers)
+- **Kubernetes**: k3s (1 master + 2 workers via MIG)
+- **Worker Management**: Managed Instance Group (MIG) with Auto-healing
 - **GitOps**: ArgoCD with App of Apps pattern
 - **Automation**: Complete bootstrap via startup script
 
@@ -101,6 +102,9 @@ terraform apply -var-file=terraform.tfvars -auto-approve
 - `argocd_url`: ArgoCD UI URL
 - `grafana_url`: Grafana Dashboard URL
 - `kiali_url`: Kiali Dashboard URL
+- `worker_mig_name`: Worker MIG 이름
+- `worker_instance_template`: Worker Instance Template 이름
+- `worker_health_check`: Worker Health Check 이름
 
 ## Bootstrap Process
 
@@ -178,6 +182,81 @@ ArgoCD를 통해 자동으로 배포되는 applications:
    - Chart: loki-stack 2.10.2
    - Auto-sync: enabled
 
+## Worker Node Auto-healing
+
+Worker node는 Managed Instance Group(MIG)으로 관리되며, 자동 복구 기능을 제공합니다.
+
+### 구성 요소
+
+| Resource | 설명 |
+|----------|------|
+| `google_compute_health_check` | Kubelet port(10250) TCP Health Check |
+| `google_compute_instance_template` | Worker VM 템플릿 (Spot VM 지원) |
+| `google_compute_instance_group_manager` | Auto-healing policy, Rolling update |
+
+### Health Check 설정
+
+```hcl
+check_interval_sec  = 10
+timeout_sec         = 5
+healthy_threshold   = 2
+unhealthy_threshold = 3
+```
+
+### Auto-healing 동작
+
+1. Health Check가 Worker의 Kubelet port(10250)를 모니터링
+2. `unhealthy_threshold`(3회) 연속 실패 시 UNHEALTHY 상태 전환
+3. MIG가 자동으로 해당 instance를 RECREATING
+4. 새 instance가 생성되고 k3s에 자동 Join
+
+### Rolling Update 정책
+
+```hcl
+update_policy {
+  type                           = "PROACTIVE"
+  max_surge_fixed                = 1
+  max_unavailable_fixed          = 0
+  replacement_method             = "SUBSTITUTE"
+}
+```
+
+- `max_surge_fixed = 1`: 업데이트 시 1개 추가 instance 허용
+- `max_unavailable_fixed = 0`: 업데이트 중 다운타임 없음
+
+## MIG Management
+
+### MIG 상태 확인
+
+```bash
+# MIG instance 목록
+gcloud compute instance-groups managed list-instances titanium-k3s-worker-mig \
+  --zone=asia-northeast3-a \
+  --project=YOUR_PROJECT_ID
+```
+
+### Auto-healing 테스트
+
+```bash
+# Worker VM 강제 중지 (Auto-healing 트리거)
+gcloud compute instances stop WORKER_INSTANCE_NAME \
+  --zone=asia-northeast3-a \
+  --project=YOUR_PROJECT_ID
+
+# MIG 상태 모니터링
+watch -n 5 'gcloud compute instance-groups managed list-instances titanium-k3s-worker-mig --zone=asia-northeast3-a --project=YOUR_PROJECT_ID'
+```
+
+### 수동 크기 조정
+
+```bash
+# Worker 수 변경
+gcloud compute instance-groups managed resize titanium-k3s-worker-mig \
+  --size=3 \
+  --zone=asia-northeast3-a \
+  --project=YOUR_PROJECT_ID
+```
+
 ## Cleanup
 
 ```bash
@@ -188,12 +267,19 @@ terraform destroy -var-file=terraform.tfvars -auto-approve
 ## Cost Estimation
 
 예상 월 비용 (asia-northeast3):
-- Master (e2-medium): ~$25/month
-- Workers (e2-medium x 2): ~$50/month
-- Network egress: 변동 (Free tier: 1GB/month)
-- Disk (standard PD): ~$5/month
 
-총 예상 비용: ~$80-100/month
+| Resource | Standard VM | Spot VM |
+|----------|-------------|---------|
+| Master (e2-medium) | ~$25/month | N/A |
+| Workers (e2-medium x 2) | ~$50/month | ~$15-20/month |
+| Network egress | 변동 | 변동 |
+| Disk (pd-balanced) | ~$10/month | ~$10/month |
+
+총 예상 비용:
+- Standard VM: ~$85-100/month
+- Spot VM (Workers): ~$50-60/month
+
+Spot VM 사용 시 `use_spot_for_workers = true` 설정
 
 ## Troubleshooting
 

@@ -6,3 +6,4 @@ metadata:
     name: titanium-prod
     environment: production
     managed-by: kustomize
+    istio-injection: enabled

@@ -41,9 +41,10 @@ test_routing() {
     local path=$1
     local expected_status=$2
     local description=$3
+    local method=${4:-GET}
 
     local status=$(kubectl run test-curl-$$-$RANDOM --rm -i --restart=Never --image=curlimages/curl --quiet -- \
-        curl -s -o /dev/null -w "%{http_code}" "http://${INGRESS_HOST}${path}" 2>/dev/null || echo "000")
+        curl -s -o /dev/null -w "%{http_code}" -X "${method}" "http://${INGRESS_HOST}${path}" 2>/dev/null || echo "000")
 
     if [ "$status" == "$expected_status" ]; then
         log_success "${description}: HTTP ${status}"
@@ -68,8 +69,8 @@ test_routing "/blog/api/posts" "200" "/blog/api/posts -> Blog Service"
 
 # Test 4: Login Endpoint (/api/login)
 echo "Test: Login Routing"
-# 401 expected for unauthenticated request
-test_routing "/api/login" "401" "/api/login -> Auth Service"
+# 422 expected for POST request without body (validates routing to auth-service)
+test_routing "/api/login" "422" "/api/login -> Auth Service" "POST"
 
 # Exit with appropriate code
 if [ $FAILED -eq 1 ]; then

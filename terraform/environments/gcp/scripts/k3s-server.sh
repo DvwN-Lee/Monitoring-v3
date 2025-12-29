@@ -106,8 +106,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/DvwN-Lee/Monitoring-v2.git
-    targetRevision: feat/gcp-deployment
+    repoURL: https://github.com/DvwN-Lee/Monitoring-v3.git
+    targetRevision: main
     path: k8s-manifests/overlays/gcp
   destination:
     server: https://kubernetes.default.svc
@@ -256,6 +256,21 @@ spec:
         maxDuration: 3m
 EOFAPP
 
+# Wait for istiod mutating webhook to be ready
+log "Waiting for istiod mutating webhook to be ready..."
+WEBHOOK_TIMEOUT=120
+WEBHOOK_ELAPSED=0
+until kubectl get mutatingwebhookconfiguration istio-sidecar-injector >/dev/null 2>&1; do
+    if [ $WEBHOOK_ELAPSED -ge $WEBHOOK_TIMEOUT ]; then
+        log "Warning: istiod webhook timeout, proceeding anyway..."
+        break
+    fi
+    log "Waiting for istiod webhook... ($WEBHOOK_ELAPSED/$WEBHOOK_TIMEOUT sec)"
+    sleep 5
+    WEBHOOK_ELAPSED=$((WEBHOOK_ELAPSED + 5))
+done
+log "istiod mutating webhook is ready"
+
 # Create ArgoCD Application for Istio Ingress Gateway
 log "Creating ArgoCD Application for istio-ingressgateway..."
 cat <<'EOFAPP' | kubectl apply -f -
@@ -277,6 +292,10 @@ spec:
       values: |
         labels:
           istio: ingressgateway
+        image:
+          registry: docker.io/istio
+          repository: proxyv2
+          tag: 1.24.2
         service:
           type: NodePort
           ports:
@@ -349,6 +368,10 @@ spec:
                   resources:
                     requests:
                       storage: 10Gi
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorNamespaceSelector: {}
+            podMonitorNamespaceSelector: {}
           service:
             type: NodePort
             nodePort: 31090
@@ -448,7 +471,8 @@ spec:
           web_root: /kiali
         service:
           type: NodePort
-          node_port: 31200
+          nodePort: 31200
+          port: 20001
         auth:
           strategy: anonymous
   destination:
@@ -468,6 +492,13 @@ spec:
         factor: 2
         maxDuration: 3m
 EOFAPP
+
+# Wait for Kiali to be deployed and patch service to NodePort
+log "Waiting for Kiali deployment..."
+kubectl wait --for=condition=Available deployment/kiali -n istio-system --timeout=300s || log "Warning: Kiali deployment not ready"
+log "Patching Kiali service to NodePort:31200..."
+kubectl patch svc kiali -n istio-system --type='json' \
+  -p='[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":31200}]' || log "Warning: Kiali service patch failed"
 
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:30080"

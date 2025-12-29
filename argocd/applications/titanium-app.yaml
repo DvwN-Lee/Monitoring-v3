@@ -13,11 +13,11 @@ spec:
   # 소스 저장소 정보
   source:
     # GitHub 저장소 URL (HTTPS)
-    repoURL: https://github.com/DvwN-Lee/Monitoring-v2.git
+    repoURL: https://github.com/DvwN-Lee/Monitoring-v3.git
     # 추적할 브랜치
     targetRevision: main
     # Kustomize 매니페스트 경로
-    path: k8s-manifests/overlays/solid-cloud
+    path: k8s-manifests/overlays/gcp
 
   # 배포 대상 Cluster 정보
   destination:

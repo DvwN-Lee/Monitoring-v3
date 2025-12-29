@@ -13,8 +13,9 @@ done
 
 echo "Master is ready, installing k3s agent..."
 
-# Install k3s agent
-curl -sfL https://get.k3s.io | K3S_URL="https://${master_ip}:6443" K3S_TOKEN="${k3s_token}" sh -
+# Install k3s agent with unique node ID (for MIG auto-healing support)
+# --with-node-id appends instance ID to node name, preventing password conflicts on recreation
+curl -sfL https://get.k3s.io | K3S_URL="https://${master_ip}:6443" K3S_TOKEN="${k3s_token}" sh -s - --with-node-id
 
 # Wait for k3s agent to be ready
 echo "Waiting for k3s agent to be ready..."

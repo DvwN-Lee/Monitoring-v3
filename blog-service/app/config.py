@@ -17,12 +17,18 @@ USE_POSTGRES = os.getenv('USE_POSTGRES', 'false').lower() == 'true'
 
 if USE_POSTGRES:
     logger.info("🐘 Using PostgreSQL database for blog posts")
+
+    # SSL mode configuration (asyncpg uses ssl parameter, not sslmode)
+    ssl_mode = os.getenv('POSTGRES_SSLMODE', 'disable').lower()
+    ssl_enabled = ssl_mode not in ('disable', 'false', 'no', '0')
+
     DB_CONFIG = {
         'host': os.getenv('POSTGRES_HOST', 'postgresql-service'),
         'port': int(os.getenv('POSTGRES_PORT', '5432')),
         'database': os.getenv('POSTGRES_DB', 'titanium'),
         'user': os.getenv('POSTGRES_USER', 'postgres'),
         'password': os.getenv('POSTGRES_PASSWORD', ''),
+        'ssl': ssl_enabled,
     }
     DATABASE_PATH = None
 else:

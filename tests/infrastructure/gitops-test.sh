@@ -36,26 +36,26 @@ fi
 
 # Test 2: Application Status (Health)
 echo "Test: Application Health"
-APP_HEALTH=$(kubectl get application -n argocd titanium-solid-cloud -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
+APP_HEALTH=$(kubectl get application -n argocd titanium-prod -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
 if [ "$APP_HEALTH" == "Healthy" ]; then
-    log_success "Application 'titanium-solid-cloud' is Healthy"
+    log_success "Application 'titanium-prod' is Healthy"
 else
-    log_error "Application 'titanium-solid-cloud' health status: ${APP_HEALTH}"
+    log_error "Application 'titanium-prod' health status: ${APP_HEALTH}"
 fi
 
 # Test 3: Application Sync Status
 echo "Test: Application Sync Status"
-APP_SYNC=$(kubectl get application -n argocd titanium-solid-cloud -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+APP_SYNC=$(kubectl get application -n argocd titanium-prod -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
 if [ "$APP_SYNC" == "Synced" ]; then
-    log_success "Application 'titanium-solid-cloud' is Synced"
+    log_success "Application 'titanium-prod' is Synced"
 else
-    log_error "Application 'titanium-solid-cloud' sync status: ${APP_SYNC}"
+    log_error "Application 'titanium-prod' sync status: ${APP_SYNC}"
 fi
 
 # Test 4: Source Repository
 echo "Test: Source Repository"
-REPO_URL=$(kubectl get application -n argocd titanium-solid-cloud -o jsonpath='{.spec.source.repoURL}' 2>/dev/null || echo "Unknown")
-if [[ "$REPO_URL" == *"Monitoring-v2"* ]]; then
+REPO_URL=$(kubectl get application -n argocd titanium-prod -o jsonpath='{.spec.source.repoURL}' 2>/dev/null || echo "Unknown")
+if [[ "$REPO_URL" == *"Monitoring-v3"* ]]; then
     log_success "Tracking correct repository"
 else
     log_error "Repository URL unexpected: ${REPO_URL}"
@@ -63,7 +63,7 @@ fi
 
 # Test 5: Auto Sync Policy
 echo "Test: Auto Sync Policy"
-AUTO_SYNC=$(kubectl get application -n argocd titanium-solid-cloud -o jsonpath='{.spec.syncPolicy.automated}' 2>/dev/null)
+AUTO_SYNC=$(kubectl get application -n argocd titanium-prod -o jsonpath='{.spec.syncPolicy.automated}' 2>/dev/null)
 if [ -n "$AUTO_SYNC" ]; then
     log_success "Auto sync is enabled"
 else

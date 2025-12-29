@@ -34,12 +34,17 @@ class UserServiceDatabase:
                     "Please set it in Kubernetes Secret or environment variables."
                 )
 
+            # SSL mode configuration (asyncpg uses ssl parameter, not sslmode)
+            ssl_mode = os.getenv('POSTGRES_SSLMODE', 'disable').lower()
+            ssl_enabled = ssl_mode not in ('disable', 'false', 'no', '0')
+
             self.db_config = {
                 'host': os.getenv('POSTGRES_HOST', 'postgresql-service'),
                 'port': int(os.getenv('POSTGRES_PORT', '5432')),
                 'database': os.getenv('POSTGRES_DB', 'titanium'),
                 'user': os.getenv('POSTGRES_USER', 'postgres'),
                 'password': postgres_password,
+                'ssl': ssl_enabled,
             }
         else:
             # SQLite configuration
