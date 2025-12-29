@@ -52,6 +52,27 @@ output "kiali_url" {
   value       = "http://${google_compute_address.master_external_ip.address}:31200"
 }
 
+# MIG Outputs
+output "worker_mig_name" {
+  description = "Name of the Worker MIG"
+  value       = google_compute_instance_group_manager.k3s_workers.name
+}
+
+output "worker_mig_self_link" {
+  description = "Self link of the Worker MIG"
+  value       = google_compute_instance_group_manager.k3s_workers.self_link
+}
+
+output "worker_instance_template" {
+  description = "Name of the Worker Instance Template"
+  value       = google_compute_instance_template.k3s_worker.name
+}
+
+output "worker_health_check" {
+  description = "Name of the Worker Health Check"
+  value       = google_compute_health_check.k3s_autohealing.name
+}
+
 # Instructions
 output "deployment_status" {
   description = "Deployment status and next steps"
