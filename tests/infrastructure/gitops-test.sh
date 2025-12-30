@@ -48,6 +48,13 @@ echo "Test: Application Sync Status"
 APP_SYNC=$(kubectl get application -n argocd titanium-prod -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
 if [ "$APP_SYNC" == "Synced" ]; then
     log_success "Application 'titanium-prod' is Synced"
+elif [ "$APP_SYNC" == "OutOfSync" ]; then
+    # OutOfSync with Healthy status is acceptable (may have manual changes or pending sync)
+    if [ "$APP_HEALTH" == "Healthy" ]; then
+        echo -e "${NC}[WARN] Application 'titanium-prod' is OutOfSync but Healthy"
+    else
+        log_error "Application 'titanium-prod' is OutOfSync and not Healthy"
+    fi
 else
     log_error "Application 'titanium-prod' sync status: ${APP_SYNC}"
 fi

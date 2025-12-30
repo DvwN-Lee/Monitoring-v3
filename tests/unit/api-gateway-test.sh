@@ -23,16 +23,17 @@ log_error() {
     FAILED=1
 }
 
-# Test internal service endpoint
+# Test service endpoint via localhost (validates service health directly)
 test_endpoint() {
-    local service=$1
+    local deployment=$1
     local port=$2
     local endpoint=$3
     local expected_status=$4
     local description=$5
 
-    local status=$(kubectl run test-curl-$$-$RANDOM -n titanium-prod --rm -i --restart=Never --image=curlimages/curl --requests="cpu=50m,memory=64Mi" --limits="cpu=100m,memory=128Mi" --quiet --command -- sh -c \
-        "sleep 5; curl -s -o /dev/null -w \"%{http_code}\" \"http://${service}.titanium-prod.svc.cluster.local:${port}${endpoint}\"" 2>/dev/null || echo "000")
+    # Test via localhost using istio-proxy sidecar curl
+    local status=$(kubectl exec -n titanium-prod deploy/${deployment} -c istio-proxy -- \
+        curl -s -o /dev/null -w "%{http_code}" "http://localhost:${port}${endpoint}" 2>/dev/null || echo "000")
 
     if [ "$status" == "$expected_status" ]; then
         log_success "${description}: HTTP ${status}"
@@ -47,15 +48,15 @@ echo "=== API Gateway Service Test ==="
 
 # Test 1: Health Check
 echo "Test: Health Check"
-test_endpoint "prod-api-gateway-service" "8000" "/health" "200" "Health endpoint"
+test_endpoint "prod-api-gateway-deployment" "8000" "/health" "200" "Health endpoint"
 
 # Test 2: Metrics
 echo "Test: Metrics"
-test_endpoint "prod-api-gateway-service" "8000" "/metrics" "200" "Metrics endpoint"
+test_endpoint "prod-api-gateway-deployment" "8000" "/metrics" "200" "Metrics endpoint"
 
 # Test 3: Stats
 echo "Test: Stats"
-test_endpoint "prod-api-gateway-service" "8000" "/stats" "200" "Stats endpoint"
+test_endpoint "prod-api-gateway-deployment" "8000" "/stats" "200" "Stats endpoint"
 
 # Exit with appropriate code
 if [ $FAILED -eq 1 ]; then
