@@ -89,10 +89,10 @@ variable "ssh_allowed_cidrs" {
   default     = []
 }
 
-variable "allowed_admin_cidrs" {
-  description = "CIDR blocks allowed for Kubernetes API and Dashboard access"
+variable "additional_admin_cidrs" {
+  description = "Additional CIDR blocks for Kubernetes API and Dashboard access (current IP is auto-detected)"
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "environment" {

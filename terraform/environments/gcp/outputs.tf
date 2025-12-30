@@ -1,5 +1,16 @@
 # Outputs for GCP Environment - Complete GitOps Automation
 
+# Admin Access
+output "detected_admin_ip" {
+  description = "Auto-detected current public IP for admin access"
+  value       = local.current_ip_cidr
+}
+
+output "admin_cidrs" {
+  description = "All admin CIDRs (auto-detected + additional)"
+  value       = local.admin_cidrs
+}
+
 # Network Outputs
 output "vpc_id" {
   description = "VPC Network ID"
