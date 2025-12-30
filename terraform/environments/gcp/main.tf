@@ -14,6 +14,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.5"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
+    }
   }
 }
 
@@ -22,6 +26,19 @@ provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
+}
+
+# Auto-detect current public IP for admin access
+data "http" "my_public_ip" {
+  url = "https://api.ipify.org"
+}
+
+locals {
+  # Current IP in CIDR notation
+  current_ip_cidr = "${chomp(data.http.my_public_ip.response_body)}/32"
+
+  # Combine auto-detected IP with any additional admin CIDRs
+  admin_cidrs = distinct(concat([local.current_ip_cidr], var.additional_admin_cidrs))
 }
 
 # VPC Network
@@ -67,8 +84,8 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # IAP (Identity-Aware Proxy) range + additional allowed CIDRs
-  source_ranges = concat(["35.235.240.0/20"], var.ssh_allowed_cidrs)
+  # IAP (Identity-Aware Proxy) range + auto-detected current IP + additional CIDRs
+  source_ranges = distinct(concat(["35.235.240.0/20"], local.admin_cidrs, var.ssh_allowed_cidrs))
   target_tags   = ["k3s-node"]
 }
 
@@ -81,7 +98,8 @@ resource "google_compute_firewall" "allow_k8s_api" {
     ports    = ["6443"]
   }
 
-  source_ranges = var.allowed_admin_cidrs
+  # Auto-detected current IP + additional admin CIDRs
+  source_ranges = local.admin_cidrs
   target_tags   = ["k3s-master"]
 }
 
@@ -94,7 +112,8 @@ resource "google_compute_firewall" "allow_dashboards" {
     ports    = ["80", "443", "30000-32767"]
   }
 
-  source_ranges = var.allowed_admin_cidrs
+  # Auto-detected current IP + additional admin CIDRs
+  source_ranges = local.admin_cidrs
   target_tags   = ["k3s-master", "k3s-worker"]
 }
 
