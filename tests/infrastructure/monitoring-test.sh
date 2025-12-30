@@ -27,7 +27,7 @@ echo "=== Monitoring Stack Test ==="
 
 # Test 1: Prometheus Pod
 echo "Test: Prometheus Pod"
-if kubectl get pods -n istio-system -l app.kubernetes.io/name=prometheus --no-headers 2>/dev/null | grep -q "Running"; then
+if kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --no-headers 2>/dev/null | grep -q "Running"; then
     log_success "Prometheus pod is Running"
 else
     log_error "Prometheus pod is not Running"
@@ -35,9 +35,9 @@ fi
 
 # Test 2: Prometheus API
 echo "Test: Prometheus API"
-PROM_POD=$(kubectl get pods -n istio-system -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+PROM_POD=$(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 if [ -n "$PROM_POD" ]; then
-    if kubectl exec -n istio-system "$PROM_POD" -- wget -qO- http://localhost:9090/api/v1/status/config 2>/dev/null | grep -q "status"; then
+    if kubectl exec -n monitoring "$PROM_POD" -c prometheus -- wget -qO- http://localhost:9090/api/v1/status/config 2>/dev/null | grep -q "status"; then
         log_success "Prometheus API is responding"
     else
         log_error "Prometheus API is not responding"
@@ -48,10 +48,26 @@ fi
 
 # Test 3: Grafana Pod
 echo "Test: Grafana Pod"
-if kubectl get pods -n istio-system -l app.kubernetes.io/name=grafana --no-headers 2>/dev/null | grep -q "Running"; then
+if kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana --no-headers 2>/dev/null | grep -q "Running"; then
     log_success "Grafana pod is Running"
 else
     log_error "Grafana pod is not Running"
+fi
+
+# Test 4: Loki Pod
+echo "Test: Loki Pod"
+if kubectl get pods -n monitoring -l app=loki --no-headers 2>/dev/null | grep -q "Running"; then
+    log_success "Loki pod is Running"
+else
+    log_error "Loki pod is not Running"
+fi
+
+# Test 5: Alertmanager Pod
+echo "Test: Alertmanager Pod"
+if kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager --no-headers 2>/dev/null | grep -q "Running"; then
+    log_success "Alertmanager pod is Running"
+else
+    log_error "Alertmanager pod is not Running"
 fi
 
 
