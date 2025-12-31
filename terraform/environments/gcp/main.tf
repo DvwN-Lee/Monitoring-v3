@@ -39,6 +39,17 @@ locals {
 
   # Combine auto-detected IP with any additional admin CIDRs
   admin_cidrs = distinct(concat([local.current_ip_cidr], var.additional_admin_cidrs))
+
+  # Common labels for all resources
+  common_labels = {
+    environment = var.environment
+    project     = "titanium"
+    managed_by  = "terraform"
+  }
+
+  # GCP System IP ranges (documented by Google)
+  gcp_iap_cidr          = "35.235.240.0/20"
+  gcp_health_check_cidrs = ["35.191.0.0/16", "130.211.0.0/22"]
 }
 
 # VPC Network
@@ -85,7 +96,7 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   # IAP (Identity-Aware Proxy) range + auto-detected current IP + additional CIDRs
-  source_ranges = distinct(concat(["35.235.240.0/20"], local.admin_cidrs, var.ssh_allowed_cidrs))
+  source_ranges = distinct(concat([local.gcp_iap_cidr], local.admin_cidrs, var.ssh_allowed_cidrs))
   target_tags   = ["k3s-node"]
 }
 
@@ -158,12 +169,9 @@ resource "google_compute_instance" "k3s_master" {
 
   tags = ["k3s-master", "k3s-node"]
 
-  labels = {
-    environment = var.environment
-    project     = "titanium"
-    managed_by  = "terraform"
-    role        = "k3s-master"
-  }
+  labels = merge(local.common_labels, {
+    role = "k3s-master"
+  })
 
   boot_disk {
     initialize_params {
@@ -186,8 +194,13 @@ resource "google_compute_instance" "k3s_master" {
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-server.sh", {
-    k3s_token         = random_password.k3s_token.result
-    postgres_password = var.postgres_password
+    k3s_token              = random_password.k3s_token.result
+    postgres_password      = var.postgres_password
+    grafana_admin_password = var.grafana_admin_password
+    gitops_repo_url        = var.gitops_repo_url
+    gitops_target_revision = var.gitops_target_revision
+    helm_versions          = var.helm_versions
+    nodeports              = var.nodeports
   })
 
   service_account {
@@ -230,7 +243,7 @@ resource "google_compute_firewall" "allow_health_check" {
   }
 
   # GCP Health Check source IP ranges
-  source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
+  source_ranges = local.gcp_health_check_cidrs
   target_tags   = ["k3s-worker"]
 }
 

@@ -50,17 +50,17 @@ output "cluster_endpoint" {
 
 output "argocd_url" {
   description = "ArgoCD UI URL"
-  value       = "http://${google_compute_address.master_external_ip.address}:30080"
+  value       = "http://${google_compute_address.master_external_ip.address}:${var.nodeports.argocd}"
 }
 
 output "grafana_url" {
   description = "Grafana Dashboard URL"
-  value       = "http://${google_compute_address.master_external_ip.address}:31300"
+  value       = "http://${google_compute_address.master_external_ip.address}:${var.nodeports.grafana}"
 }
 
 output "kiali_url" {
   description = "Kiali Dashboard URL"
-  value       = "http://${google_compute_address.master_external_ip.address}:31200"
+  value       = "http://${google_compute_address.master_external_ip.address}:${var.nodeports.kiali}"
 }
 
 # MIG Outputs
@@ -113,16 +113,16 @@ output "deployment_status" {
        gcloud compute ssh ubuntu@${google_compute_instance.k3s_master.name} --zone=${var.zone} --command="sudo cat /etc/rancher/k3s/k3s.yaml" | sed "s/127.0.0.1/${google_compute_address.master_external_ip.address}/g" > ~/.kube/config-gcp
 
     2. ArgoCD UI:
-       http://${google_compute_address.master_external_ip.address}:30080
+       http://${google_compute_address.master_external_ip.address}:${var.nodeports.argocd}
 
        Get admin password:
        kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 
     3. Grafana Dashboard:
-       http://${google_compute_address.master_external_ip.address}:31300
+       http://${google_compute_address.master_external_ip.address}:${var.nodeports.grafana}
 
     4. Kiali Dashboard:
-       http://${google_compute_address.master_external_ip.address}:31200
+       http://${google_compute_address.master_external_ip.address}:${var.nodeports.kiali}
 
     5. Monitor bootstrap progress:
        gcloud compute ssh ubuntu@${google_compute_instance.k3s_master.name} --zone=${var.zone}
@@ -143,6 +143,6 @@ output "deployment_status" {
     kubectl get pods --all-namespaces
 
     All applications are managed by ArgoCD!
-    Any changes to https://github.com/DvwN-Lee/Monitoring-v2.git will be automatically synced.
+    Any changes to ${var.gitops_repo_url} will be automatically synced.
   EOT
 }

@@ -100,3 +100,61 @@ variable "environment" {
   type        = string
   default     = "prod"
 }
+
+# GitOps Configuration
+variable "gitops_repo_url" {
+  description = "Git repository URL for ArgoCD GitOps"
+  type        = string
+  default     = "https://github.com/DvwN-Lee/Monitoring-v3.git"
+}
+
+variable "gitops_target_revision" {
+  description = "Git branch or tag for ArgoCD sync"
+  type        = string
+  default     = "main"
+}
+
+# Grafana Configuration
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
+}
+
+# Helm Chart Versions
+variable "helm_versions" {
+  description = "Helm chart versions for installed components"
+  type = object({
+    istio           = string
+    loki_stack      = string
+    kube_prometheus = string
+    kiali           = string
+  })
+  default = {
+    istio           = "1.24.2"
+    loki_stack      = "2.10.2"
+    kube_prometheus = "79.5.0"
+    kiali           = "2.4.0"
+  }
+}
+
+# NodePort Configuration
+variable "nodeports" {
+  description = "NodePort assignments for services"
+  type = object({
+    argocd          = number
+    grafana         = number
+    prometheus      = number
+    kiali           = number
+    istio_http      = number
+    istio_https     = number
+  })
+  default = {
+    argocd          = 30080
+    grafana         = 31300
+    prometheus      = 31090
+    kiali           = 31200
+    istio_http      = 31080
+    istio_https     = 31443
+  }
+}
