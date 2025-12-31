@@ -11,9 +11,27 @@ log() {
 
 log "Starting complete k3s + ArgoCD bootstrap..."
 
-# Variables
+# Variables from Terraform
 K3S_TOKEN="${k3s_token}"
 POSTGRES_PASSWORD="${postgres_password}"
+GRAFANA_ADMIN_PASSWORD="${grafana_admin_password}"
+GITOPS_REPO_URL="${gitops_repo_url}"
+GITOPS_TARGET_REVISION="${gitops_target_revision}"
+
+# Helm Chart Versions
+ISTIO_VERSION="${helm_versions.istio}"
+LOKI_STACK_VERSION="${helm_versions.loki_stack}"
+KUBE_PROMETHEUS_VERSION="${helm_versions.kube_prometheus}"
+KIALI_VERSION="${helm_versions.kiali}"
+
+# NodePort Configuration
+NODEPORT_ARGOCD="${nodeports.argocd}"
+NODEPORT_GRAFANA="${nodeports.grafana}"
+NODEPORT_PROMETHEUS="${nodeports.prometheus}"
+NODEPORT_KIALI="${nodeports.kiali}"
+NODEPORT_ISTIO_HTTP="${nodeports.istio_http}"
+NODEPORT_ISTIO_HTTPS="${nodeports.istio_https}"
+
 PRIVATE_IP=$(hostname -I | awk '{print $1}')
 
 # Wait for metadata service and get public IP
@@ -69,9 +87,10 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace titanium-prod --dry-run=client -o yaml | kubectl apply -f -
 
-# Install ArgoCD
-log "Installing ArgoCD..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# Install ArgoCD (version pinned for stability)
+ARGOCD_VERSION="v3.2.3"
+log "Installing ArgoCD ${ARGOCD_VERSION}..."
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
 
 # Wait for ArgoCD to be ready
 log "Waiting for ArgoCD deployments..."
@@ -79,7 +98,7 @@ kubectl wait --for=condition=Available deployment --all -n argocd --timeout=600s
 
 # Patch ArgoCD server to NodePort 30080
 log "Configuring ArgoCD server as NodePort:30080..."
-kubectl patch svc argocd-server -n argocd --type='json' -p='[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":30080}]'
+kubectl patch svc argocd-server -n argocd --type='json' -p="[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"NodePort\"},{\"op\":\"add\",\"path\":\"/spec/ports/0/nodePort\",\"value\":$NODEPORT_ARGOCD}]"
 
 # Make ArgoCD server insecure (no TLS) for easier access
 kubectl patch deployment argocd-server -n argocd --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--insecure"}]'
@@ -95,7 +114,7 @@ kubectl create secret generic postgresql-secret \
 
 # Create ArgoCD Application for titanium-prod
 log "Creating ArgoCD Application for titanium-prod..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -106,8 +125,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/DvwN-Lee/Monitoring-v3.git
-    targetRevision: main
+    repoURL: $GITOPS_REPO_URL
+    targetRevision: $GITOPS_TARGET_REVISION
     path: k8s-manifests/overlays/gcp
   destination:
     server: https://kubernetes.default.svc
@@ -132,7 +151,7 @@ EOFAPP
 
 # Create ArgoCD Application for Loki Stack
 log "Creating ArgoCD Application for loki-stack..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -145,7 +164,7 @@ spec:
   source:
     chart: loki-stack
     repoURL: https://grafana.github.io/helm-charts
-    targetRevision: 2.10.2
+    targetRevision: $LOKI_STACK_VERSION
     helm:
       releaseName: loki
       values: |
@@ -179,7 +198,7 @@ EOFAPP
 
 # Create ArgoCD Application for Istio Base (CRDs)
 log "Creating ArgoCD Application for istio-base..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -192,7 +211,7 @@ spec:
   source:
     chart: base
     repoURL: https://istio-release.storage.googleapis.com/charts
-    targetRevision: 1.24.2
+    targetRevision: $ISTIO_VERSION
     helm:
       releaseName: istio-base
   destination:
@@ -213,7 +232,7 @@ sleep 10
 
 # Create ArgoCD Application for Istiod (Control Plane)
 log "Creating ArgoCD Application for istiod..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -226,7 +245,7 @@ spec:
   source:
     chart: istiod
     repoURL: https://istio-release.storage.googleapis.com/charts
-    targetRevision: 1.24.2
+    targetRevision: $ISTIO_VERSION
     helm:
       releaseName: istiod
       values: |
@@ -273,7 +292,7 @@ log "istiod mutating webhook is ready"
 
 # Create ArgoCD Application for Istio Ingress Gateway
 log "Creating ArgoCD Application for istio-ingressgateway..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -286,7 +305,7 @@ spec:
   source:
     chart: gateway
     repoURL: https://istio-release.storage.googleapis.com/charts
-    targetRevision: 1.24.2
+    targetRevision: $ISTIO_VERSION
     helm:
       releaseName: istio-ingressgateway
       values: |
@@ -295,18 +314,18 @@ spec:
         image:
           registry: docker.io/istio
           repository: proxyv2
-          tag: 1.24.2
+          tag: $ISTIO_VERSION
         service:
           type: NodePort
           ports:
           - name: http2
             port: 80
             targetPort: 80
-            nodePort: 31080
+            nodePort: $NODEPORT_ISTIO_HTTP
           - name: https
             port: 443
             targetPort: 443
-            nodePort: 31443
+            nodePort: $NODEPORT_ISTIO_HTTPS
         resources:
           requests:
             cpu: 50m
@@ -334,7 +353,7 @@ EOFAPP
 
 # Create ArgoCD Application for kube-prometheus-stack
 log "Creating ArgoCD Application for kube-prometheus-stack..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -347,7 +366,7 @@ spec:
   source:
     chart: kube-prometheus-stack
     repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: 79.5.0
+    targetRevision: $KUBE_PROMETHEUS_VERSION
     helm:
       releaseName: prometheus
       values: |
@@ -374,13 +393,13 @@ spec:
             podMonitorNamespaceSelector: {}
           service:
             type: NodePort
-            nodePort: 31090
+            nodePort: $NODEPORT_PROMETHEUS
         grafana:
           enabled: true
-          adminPassword: admin
+          adminPassword: $GRAFANA_ADMIN_PASSWORD
           service:
             type: NodePort
-            nodePort: 31300
+            nodePort: $NODEPORT_GRAFANA
           resources:
             requests:
               cpu: 50m
@@ -439,7 +458,7 @@ EOFAPP
 
 # Create ArgoCD Application for Kiali
 log "Creating ArgoCD Application for kiali..."
-cat <<'EOFAPP' | kubectl apply -f -
+cat <<EOFAPP | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -452,7 +471,7 @@ spec:
   source:
     chart: kiali-server
     repoURL: https://kiali.org/helm-charts
-    targetRevision: 2.4.0
+    targetRevision: $KIALI_VERSION
     helm:
       releaseName: kiali
       values: |
@@ -471,7 +490,7 @@ spec:
           web_root: /kiali
         service:
           type: NodePort
-          nodePort: 31200
+          nodePort: $NODEPORT_KIALI
           port: 20001
         auth:
           strategy: anonymous
@@ -496,16 +515,16 @@ EOFAPP
 # Wait for Kiali to be deployed and patch service to NodePort
 log "Waiting for Kiali deployment..."
 kubectl wait --for=condition=Available deployment/kiali -n istio-system --timeout=300s || log "Warning: Kiali deployment not ready"
-log "Patching Kiali service to NodePort:31200..."
+log "Patching Kiali service to NodePort:$NODEPORT_KIALI..."
 kubectl patch svc kiali -n istio-system --type='json' \
-  -p='[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":31200}]' || log "Warning: Kiali service patch failed"
+  -p="[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"NodePort\"},{\"op\":\"add\",\"path\":\"/spec/ports/0/nodePort\",\"value\":$NODEPORT_KIALI}]" || log "Warning: Kiali service patch failed"
 
 log "Bootstrap complete!"
-log "ArgoCD UI: http://$PUBLIC_IP:30080"
-log "Grafana UI: http://$PUBLIC_IP:31300 (admin/admin)"
-log "Prometheus UI: http://$PUBLIC_IP:31090"
-log "Kiali UI: http://$PUBLIC_IP:31200"
-log "Istio Ingress Gateway: http://$PUBLIC_IP:31080"
+log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"
+log "Grafana UI: http://$PUBLIC_IP:$NODEPORT_GRAFANA"
+log "Prometheus UI: http://$PUBLIC_IP:$NODEPORT_PROMETHEUS"
+log "Kiali UI: http://$PUBLIC_IP:$NODEPORT_KIALI"
+log "Istio Ingress Gateway: http://$PUBLIC_IP:$NODEPORT_ISTIO_HTTP"
 log "Get ArgoCD admin password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
 log "ArgoCD will now automatically sync applications from Git"
 
