@@ -23,12 +23,9 @@ resource "google_compute_instance_template" "k3s_worker" {
 
   tags = ["k3s-worker", "k3s-node"]
 
-  labels = {
-    environment = var.environment
-    project     = "titanium"
-    managed_by  = "terraform"
-    role        = "k3s-worker"
-  }
+  labels = merge(local.common_labels, {
+    role = "k3s-worker"
+  })
 
   disk {
     source_image = var.os_image
