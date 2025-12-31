@@ -87,9 +87,10 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace titanium-prod --dry-run=client -o yaml | kubectl apply -f -
 
-# Install ArgoCD
-log "Installing ArgoCD..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# Install ArgoCD (version pinned for stability)
+ARGOCD_VERSION="v3.2.3"
+log "Installing ArgoCD ${ARGOCD_VERSION}..."
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
 
 # Wait for ArgoCD to be ready
 log "Waiting for ArgoCD deployments..."
