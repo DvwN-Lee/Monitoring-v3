@@ -26,6 +26,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('AuthServiceApp')
 
 # Pydantic 모델
+# 로그인 시에는 Password 복잡도 검증을 수행하지 않음 (user-service 회원가입 시에만 검증)
+# 이유: 공격자에게 비밀번호 정책 정보 노출 방지
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100, description="Username for authentication")
     password: str = Field(..., min_length=1, max_length=200, description="Password for authentication")
@@ -50,8 +52,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS 설정
-# Environment-based CORS configuration
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# Environment-based CORS configuration (기본값 없음 - 보안 강화)
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+if not _origins_raw:
+    logger.warning("ALLOWED_ORIGINS not set. CORS will reject all cross-origin requests.")
+ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

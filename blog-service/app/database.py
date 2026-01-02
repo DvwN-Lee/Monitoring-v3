@@ -440,6 +440,95 @@ class BlogDatabase:
                 await conn.commit()
                 return cursor.rowcount > 0
 
+    async def delete_post_atomic(self, post_id: int, author: str) -> bool:
+        """Atomic delete with author check. Returns True if deleted, False if not found or not author."""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM posts WHERE id = $1 AND author = $2",
+                    post_id, author
+                )
+                return result != "DELETE 0"
+        else:
+            async with aiosqlite.connect(DATABASE_PATH) as conn:
+                cursor = await conn.execute(
+                    "DELETE FROM posts WHERE id = ? AND author = ?",
+                    (post_id, author)
+                )
+                await conn.commit()
+                return cursor.rowcount > 0
+
+    async def update_post_atomic(
+        self,
+        post_id: int,
+        author: str,
+        title: Optional[str],
+        content: Optional[str],
+        category_id: Optional[int]
+    ) -> Optional[Dict]:
+        """Atomic update with author check. Returns updated post or None if not found/not author."""
+        fields = []
+        params = []
+        param_idx = 1
+
+        if self.use_postgres:
+            if title is not None:
+                fields.append(f"title = ${param_idx}")
+                params.append(title)
+                param_idx += 1
+            if content is not None:
+                fields.append(f"content = ${param_idx}")
+                params.append(content)
+                param_idx += 1
+            if category_id is not None:
+                fields.append(f"category_id = ${param_idx}")
+                params.append(category_id)
+                param_idx += 1
+
+            if not fields:
+                return "no_changes"
+
+            fields.append("updated_at = CURRENT_TIMESTAMP")
+            params.extend([post_id, author])
+
+            query = f"""
+                UPDATE posts SET {', '.join(fields)}
+                WHERE id = ${param_idx} AND author = ${param_idx + 1}
+                RETURNING id
+            """
+
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchval(query, *params)
+                if result is None:
+                    return None
+                return await self.get_post_by_id(post_id)
+        else:
+            if title is not None:
+                fields.append("title = ?")
+                params.append(title)
+            if content is not None:
+                fields.append("content = ?")
+                params.append(content)
+            if category_id is not None:
+                fields.append("category_id = ?")
+                params.append(category_id)
+
+            if not fields:
+                return "no_changes"
+
+            fields.append("updated_at = ?")
+            params.append(datetime.utcnow().isoformat())
+            params.extend([post_id, author])
+
+            query = f"UPDATE posts SET {', '.join(fields)} WHERE id = ? AND author = ?"
+
+            async with aiosqlite.connect(DATABASE_PATH) as conn:
+                cursor = await conn.execute(query, tuple(params))
+                await conn.commit()
+                if cursor.rowcount == 0:
+                    return None
+                return await self.get_post_by_id(post_id)
+
     async def get_post_count(self) -> int:
         """Get total number of posts."""
         if self.use_postgres:

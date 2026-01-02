@@ -39,7 +39,7 @@ class CacheService:
             logger.error(f"Redis GET error for user ID {user_id}: {e}")
             return None
 
-    async def set_user(self, user_id, user_data, expiration_secs=3600):
+    async def set_user(self, user_id, user_data, expiration_secs=300):
         if not self.redis_client:
             return
         try:
