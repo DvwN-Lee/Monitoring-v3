@@ -12,12 +12,19 @@ class AuthConfig:
     """인증 관련 설정"""
     session_timeout: int = 86400  # 세션 유효 시간 (24시간)
     internal_api_secret: str = field(default_factory=lambda: os.getenv('INTERNAL_API_SECRET', ''))
+    jwt_private_key: str = field(default_factory=lambda: os.getenv('JWT_PRIVATE_KEY', ''))
+    jwt_public_key: str = field(default_factory=lambda: os.getenv('JWT_PUBLIC_KEY', ''))
 
     def __post_init__(self):
         if not self.internal_api_secret:
             raise ValueError(
                 "INTERNAL_API_SECRET environment variable is required. "
                 "Please set it in Kubernetes Secret or environment variables."
+            )
+        if not self.jwt_private_key or not self.jwt_public_key:
+            raise ValueError(
+                "JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables are required for RS256. "
+                "Please set them in Kubernetes Secret or environment variables."
             )
 
 @dataclass
@@ -32,6 +39,8 @@ class Config:
         self.auth = AuthConfig()
         self.services = ServiceUrls()
         self.INTERNAL_API_SECRET = self.auth.internal_api_secret
+        self.JWT_PRIVATE_KEY = self.auth.jwt_private_key
+        self.JWT_PUBLIC_KEY = self.auth.jwt_public_key
         self.USER_SERVICE_URL = self.services.user_service
 
 

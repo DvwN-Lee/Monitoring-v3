@@ -1,9 +1,10 @@
 # TItanium-v2/user-service/user_service.py
 # Version: 1.2.1 - Improved Prometheus histogram buckets for accurate P95/P99
 
+import re
 import logging
 from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -19,9 +20,29 @@ from database_service import UserServiceDatabase
 from cache_service import CacheService
 
 class UserIn(BaseModel):
-    username: str
+    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8, max_length=200)
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not re.match(r'^[a-zA-Z0-9_]+$', v):
+            raise ValueError('Username must contain only alphanumeric characters and underscores')
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            raise ValueError('Password must contain at least one special character')
+        return v
 
 class UserOut(BaseModel):
     id: int
