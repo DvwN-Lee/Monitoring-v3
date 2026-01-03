@@ -32,4 +32,5 @@ data:
   APP_VERSION: "2.0.0"
 
   # CORS Settings
-  CORS_ALLOWED_ORIGINS: "*"
+  # Production 환경에서는 특정 Domain만 허용
+  CORS_ALLOWED_ORIGINS: "https://titanium.example.com,https://admin.titanium.example.com"
