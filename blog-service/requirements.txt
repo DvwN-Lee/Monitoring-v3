@@ -10,3 +10,4 @@ prometheus-client
 prometheus-fastapi-instrumentator
 alembic
 sqlalchemy
+bleach
