@@ -8,3 +8,4 @@ asyncpg
 aiosqlite
 prometheus-client
 prometheus-fastapi-instrumentator
+slowapi>=0.1.9

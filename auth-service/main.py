@@ -1,9 +1,12 @@
+# Version: 1.1.0 - Security Enhancement (Security Headers)
 import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -46,10 +49,61 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 auth_service = AuthService()
 
+# === Security Headers Middleware ===
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """보안 헤더를 추가하는 Middleware (Gemini recommendation 반영)"""
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        # HSTS - HTTPS 강제
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Clickjacking 방지
+        response.headers["X-Frame-Options"] = "DENY"
+        # MIME type sniffing 방지
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # XSS Filter (legacy browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Referrer Policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Permissions Policy
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # CSP - API Service는 strict 정책 적용
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # Cache-Control - 민감한 데이터 캐싱 방지
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Rate Limiting 설정
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# === Unified Error Response Handler ===
+ERROR_TYPES = {
+    400: "BadRequest",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "NotFound",
+    429: "TooManyRequests",
+    500: "InternalServerError",
+    502: "BadGateway",
+}
+
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """표준화된 에러 응답 형식"""
+    error_type = ERROR_TYPES.get(exc.status_code, "Error")
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": error_type,
+            "message": detail,
+            "status_code": exc.status_code
+        }
+    )
+
+app.add_exception_handler(HTTPException, http_exception_handler)
 
 # CORS 설정
 # Environment-based CORS configuration (기본값 없음 - 보안 강화)
