@@ -3,9 +3,18 @@ import os
 import logging
 from typing import Optional, Dict
 
-from werkzeug.security import generate_password_hash, check_password_hash
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHash
+from werkzeug.security import check_password_hash
 
 logger = logging.getLogger(__name__)
+
+# Argon2id PasswordHasher (OWASP 권장)
+ph = PasswordHasher(
+    time_cost=3,        # Iteration 횟수
+    memory_cost=65536,  # 64MB 메모리 사용
+    parallelism=4,      # 병렬 처리 수
+)
 
 # Determine which DB to use based on environment variable
 USE_POSTGRES = os.getenv('USE_POSTGRES', 'false').lower() == 'true'
@@ -105,10 +114,8 @@ class UserServiceDatabase:
         logger.info("SQLite user database schema initialized")
 
     async def add_user(self, username: str, email: str, password: str) -> Optional[int]:
-        """Add a new user with hashed password."""
-        # Optimized PBKDF2 iterations: 100000 -> 60000 for better performance
-        # Still secure (NIST minimum: 10000, this is 6x higher)
-        password_hash = generate_password_hash(password, method='pbkdf2:sha256:60000')
+        """Add a new user with Argon2id hashed password."""
+        password_hash = ph.hash(password)
 
         try:
             if self.use_postgres:
@@ -186,16 +193,59 @@ class UserServiceDatabase:
             return None
 
     async def verify_user_credentials(self, username: str, password: str) -> Optional[Dict]:
-        """Verify user credentials."""
+        """Verify user credentials with Argon2 and legacy PBKDF2 fallback."""
         user = await self.get_user_by_username(username)
-        if user and check_password_hash(user['password_hash'], password):
-            # Return user info without password_hash
-            return {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"]
-            }
+        if not user:
+            return None
+
+        password_hash = user['password_hash']
+        user_info = {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"]
+        }
+
+        # Argon2 Hash 검증 시도
+        if password_hash.startswith('$argon2'):
+            try:
+                ph.verify(password_hash, password)
+                # Rehash if parameters changed
+                if ph.check_needs_rehash(password_hash):
+                    new_hash = ph.hash(password)
+                    await self._update_password_hash(user['id'], new_hash)
+                    logger.info(f"Rehashed password for user '{username}' with updated Argon2 parameters")
+                return user_info
+            except VerifyMismatchError:
+                return None
+
+        # Legacy PBKDF2 Fallback (점진적 마이그레이션)
+        if check_password_hash(password_hash, password):
+            # 마이그레이션: Argon2로 재해시
+            new_hash = ph.hash(password)
+            await self._update_password_hash(user['id'], new_hash)
+            logger.info(f"Migrated password hash for user '{username}' from PBKDF2 to Argon2")
+            return user_info
+
         return None
+
+    async def _update_password_hash(self, user_id: int, new_hash: str):
+        """Update password hash for a user."""
+        try:
+            if self.use_postgres:
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE users SET password_hash = $1 WHERE id = $2",
+                        new_hash, user_id
+                    )
+            else:
+                async with aiosqlite.connect(self.db_file) as conn:
+                    await conn.execute(
+                        "UPDATE users SET password_hash = ? WHERE id = ?",
+                        (new_hash, user_id)
+                    )
+                    await conn.commit()
+        except Exception as e:
+            logger.error(f"Error updating password hash for user ID {user_id}: {e}", exc_info=True)
 
     async def health_check(self) -> bool:
         """Check database connection health."""

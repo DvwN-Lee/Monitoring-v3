@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 werkzeug
+argon2-cffi
 redis[hiredis]
 pydantic[email]
 asyncpg

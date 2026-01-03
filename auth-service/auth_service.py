@@ -1,8 +1,10 @@
 import jwt
+import uuid
 import aiohttp
 import logging
 from typing import Optional
 from datetime import datetime, timedelta, timezone
+from cryptography.hazmat.primitives import serialization
 from config import config
 
 logging.basicConfig(level=logging.INFO)
@@ -12,11 +14,20 @@ class AuthService:
     _session: Optional[aiohttp.ClientSession] = None
 
     def __init__(self):
-        self.JWT_SECRET = config.INTERNAL_API_SECRET
-        self.JWT_ALGORITHM = "HS256"
+        self.JWT_ALGORITHM = "RS256"
         self.JWT_EXP_DELTA_SECONDS = timedelta(hours=24)
         self.USER_SERVICE_VERIFY_URL = f"{config.USER_SERVICE_URL}/users/verify-credentials"
-        logger.info("Auth service initialized for JWT-based authentication.")
+
+        # RS256 Key Pair 로드
+        self._private_key = serialization.load_pem_private_key(
+            config.JWT_PRIVATE_KEY.encode(),
+            password=None
+        )
+        self._public_key = serialization.load_pem_public_key(
+            config.JWT_PUBLIC_KEY.encode()
+        )
+
+        logger.info("Auth service initialized with RS256 JWT authentication.")
 
     @classmethod
     async def get_session(cls) -> aiohttp.ClientSession:
@@ -56,12 +67,16 @@ class AuthService:
             return {"status": "failed", "message": "Invalid username or password"}
 
         user_id = user_data.get("id")
+        now = datetime.now(timezone.utc)
         jwt_payload = {
             'user_id': user_id,
             'username': username,
-            'exp': datetime.now(timezone.utc) + self.JWT_EXP_DELTA_SECONDS
+            'exp': now + self.JWT_EXP_DELTA_SECONDS,
+            'iat': now,
+            'jti': str(uuid.uuid4()),
+            'iss': 'auth-service'
         }
-        token = jwt.encode(jwt_payload, self.JWT_SECRET, algorithm=self.JWT_ALGORITHM)
+        token = jwt.encode(jwt_payload, self._private_key, algorithm=self.JWT_ALGORITHM)
 
         logger.info(f"Login successful for '{username}'. JWT token created.")
         return {"status": "success", "token": token}
@@ -70,8 +85,9 @@ class AuthService:
         try:
             decoded_payload = jwt.decode(
                 token,
-                self.JWT_SECRET,
-                algorithms=[self.JWT_ALGORITHM]
+                self._public_key,
+                algorithms=[self.JWT_ALGORITHM],
+                issuer='auth-service'
             )
             logger.info(f"Token verified successfully for user_id: {decoded_payload.get('user_id')}")
             return {"status": "success", "data": decoded_payload}
