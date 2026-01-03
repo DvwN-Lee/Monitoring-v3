@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Optional
 from contextlib import asynccontextmanager
+import bleach
 from fastapi import FastAPI, Request, HTTPException, Depends, Query, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +11,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator.metrics import Info
+
+# XSS 방지를 위한 Content Sanitization 설정
+ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'code', 'pre', 'blockquote']
+ALLOWED_ATTRS = {'a': ['href', 'title']}
+
+
+def sanitize_content(content: str) -> str:
+    """HTML 콘텐츠를 sanitize하여 XSS 공격 방지"""
+    return bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
+
+
+def sanitize_title(title: str) -> str:
+    """제목에서 모든 HTML 태그 제거"""
+    return bleach.clean(title, tags=[], strip=True)
 
 try:
     from prometheus_fastapi_instrumentator.metrics import request_latency
@@ -124,7 +139,7 @@ async def handle_get_posts(
         items = await db.get_posts(offset, limit, category)
     except Exception as e:
         logger.error(f"Database error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     # 3. Format response - 목록 응답은 요약 정보 위주로 반환 + 발췌(excerpt) + 카테고리 정보
     summaries = []
@@ -190,12 +205,16 @@ async def handle_get_post_by_id(post_id: int):
 @app.post("/blog/api/posts", status_code=201)
 async def create_post(request: Request, payload: PostCreate, username: str = Depends(require_user)):
     try:
+        # Sanitize content (XSS 방지)
+        sanitized_title = sanitize_title(payload.title)
+        sanitized_content = sanitize_content(payload.content)
+
         # Get or create category
         category = await db.get_or_create_category(payload.category_name)
         category_id = category['id']
 
-        # Create post
-        new_post = await db.create_post(payload.title, payload.content, username, category_id)
+        # Create post with sanitized content
+        new_post = await db.create_post(sanitized_title, sanitized_content, username, category_id)
 
         # Invalidate cache
         await cache.invalidate_posts()
@@ -203,28 +222,32 @@ async def create_post(request: Request, payload: PostCreate, username: str = Dep
         return JSONResponse(content=new_post, status_code=201)
     except Exception as e:
         logger.error(f"Database error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.patch("/blog/api/posts/{post_id}")
 async def update_post_partial(post_id: int, request: Request, payload: PostUpdate, username: str = Depends(require_user)):
     try:
-        # Check author
-        author = await db.get_post_author(post_id)
-        if not author:
-            raise HTTPException(status_code=404, detail={'error': 'Post not found'})
-        if author != username:
-            raise HTTPException(status_code=403, detail='Forbidden: not the author')
-
         # Get or create category if provided
         category_id = None
         if payload.category_name is not None:
             category = await db.get_or_create_category(payload.category_name)
             category_id = category['id']
 
-        # Update post
-        updated_post = await db.update_post(post_id, payload.title, payload.content, category_id)
-        if not updated_post:
-             return JSONResponse(content={"message": "No changes"})
+        # Sanitize content if provided (XSS 방지)
+        sanitized_title = sanitize_title(payload.title) if payload.title else None
+        sanitized_content = sanitize_content(payload.content) if payload.content else None
+
+        # Atomic update with author check (Race Condition 방지)
+        updated_post = await db.update_post_atomic(
+            post_id, username, sanitized_title, sanitized_content, category_id
+        )
+
+        if updated_post is None:
+            # 권한 없거나 게시물 없음
+            raise HTTPException(status_code=403, detail='Forbidden or post not found')
+
+        if updated_post == "no_changes":
+            return JSONResponse(content={"message": "No changes"})
 
         # Invalidate cache
         await cache.invalidate_posts()
@@ -249,7 +272,7 @@ async def update_post_partial(post_id: int, request: Request, payload: PostUpdat
         raise
     except Exception as e:
         logger.error(f"Database error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/blog/api/categories")
 async def handle_get_categories():
@@ -274,15 +297,10 @@ async def handle_get_categories():
 @app.delete("/blog/api/posts/{post_id}", status_code=204)
 async def delete_post(post_id: int, request: Request, username: str = Depends(require_user)):
     try:
-        # Fetch post to check author
-        post = await db.get_post_by_id(post_id)
-        if not post:
-            raise HTTPException(status_code=404, detail={'error': 'Post not found'})
-        if post['author'] != username:
-            raise HTTPException(status_code=403, detail='Forbidden: not the author')
-
-        # Delete post
-        await db.delete_post(post_id)
+        # Atomic delete with author check (Race Condition 방지)
+        deleted = await db.delete_post_atomic(post_id, username)
+        if not deleted:
+            raise HTTPException(status_code=403, detail='Forbidden or post not found')
 
         # Cleanup empty categories
         deleted_count = await db.cleanup_empty_categories()
@@ -297,7 +315,7 @@ async def delete_post(post_id: int, request: Request, username: str = Depends(re
         raise
     except Exception as e:
         logger.error(f"Database error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health")
 async def handle_health():
