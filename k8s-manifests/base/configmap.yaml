@@ -26,4 +26,4 @@ data:
   APP_VERSION: "1.0.0"
 
   # === 보안 설정 ===
-  CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+  ALLOWED_ORIGINS: "http://localhost:3000"

@@ -1,3 +1,4 @@
+# Version: 1.1.0 - Security Enhancement (CORS, Rate Limiting, Security Headers)
 import os
 import logging
 from typing import Optional
@@ -8,9 +9,14 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator.metrics import Info
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # XSS 방지를 위한 Content Sanitization 설정
 ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'code', 'pre', 'blockquote']
@@ -61,9 +67,46 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS 설정
-# Environment-based CORS configuration
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# === Security Headers Middleware ===
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """보안 헤더를 추가하는 Middleware (Gemini recommendation 반영 - CSP 분기 처리)"""
+    async def dispatch(self, request: Request, call_next) -> StarletteResponse:
+        response = await call_next(request)
+        # HSTS - HTTPS 강제
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Clickjacking 방지
+        response.headers["X-Frame-Options"] = "DENY"
+        # MIME type sniffing 방지
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # XSS Filter (legacy browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Referrer Policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Permissions Policy
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+        # CSP 분기 처리: Blog HTML 페이지는 완화, API endpoint는 strict
+        path = str(request.url.path)
+        if path.startswith("/blog/") and not path.startswith("/blog/api/"):
+            # Blog HTML 페이지 - script/style 허용
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        else:
+            # API endpoint - strict 정책
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+            # API endpoint에만 Cache-Control 적용
+            response.headers["Cache-Control"] = "no-store"
+
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# === CORS 설정 ===
+# Environment-based CORS configuration (취약한 기본값 "*" 제거)
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+if not _origins_raw:
+    logger.warning("ALLOWED_ORIGINS not set. CORS will reject all cross-origin requests.")
+ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -71,6 +114,37 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
+
+# === Rate Limiting 설정 ===
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# === Unified Error Response Handler ===
+ERROR_TYPES = {
+    400: "BadRequest",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "NotFound",
+    429: "TooManyRequests",
+    500: "InternalServerError",
+    502: "BadGateway",
+}
+
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """표준화된 에러 응답 형식"""
+    error_type = ERROR_TYPES.get(exc.status_code, "Error")
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": error_type,
+            "message": detail,
+            "status_code": exc.status_code
+        }
+    )
+
+app.add_exception_handler(HTTPException, http_exception_handler)
 
 # Prometheus 메트릭 설정
 # 커스텀 메트릭: http_requests_total_custom
@@ -120,7 +194,9 @@ app.mount("/blog/static", StaticFiles(directory="static"), name="static")
 
 # --- API 핸들러 함수 ---
 @app.get("/blog/api/posts")
+@limiter.limit("600/minute")  # Gemini recommendation: infinite scroll 대응
 async def handle_get_posts(
+    request: Request,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None)
@@ -165,7 +241,8 @@ async def handle_get_posts(
     return JSONResponse(content=summaries)
 
 @app.get("/blog/api/posts/{post_id}")
-async def handle_get_post_by_id(post_id: int):
+@limiter.limit("300/minute")  # Gemini recommendation: single post read
+async def handle_get_post_by_id(request: Request, post_id: int):
     """ID로 특정 게시물을 찾아 반환합니다."""
     # 1. Check cache
     cached = await cache.get_post(post_id)
@@ -203,6 +280,7 @@ async def handle_get_post_by_id(post_id: int):
     return JSONResponse(content=response)
 
 @app.post("/blog/api/posts", status_code=201)
+@limiter.limit("10/minute")
 async def create_post(request: Request, payload: PostCreate, username: str = Depends(require_user)):
     try:
         # Sanitize content (XSS 방지)
@@ -225,6 +303,7 @@ async def create_post(request: Request, payload: PostCreate, username: str = Dep
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.patch("/blog/api/posts/{post_id}")
+@limiter.limit("30/minute")
 async def update_post_partial(post_id: int, request: Request, payload: PostUpdate, username: str = Depends(require_user)):
     try:
         # Get or create category if provided
@@ -295,6 +374,7 @@ async def handle_get_categories():
     return JSONResponse(content=categories)
 
 @app.delete("/blog/api/posts/{post_id}", status_code=204)
+@limiter.limit("10/minute")
 async def delete_post(post_id: int, request: Request, username: str = Depends(require_user)):
     try:
         # Atomic delete with author check (Race Condition 방지)
