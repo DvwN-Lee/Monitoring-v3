@@ -108,13 +108,13 @@ labels:
 # Images to use (updated with Docker Hub registry)
 images:
   - name: dongju101/user-service
-    newTag: main-81fed50
+    newTag: main-cda2adf
   - name: dongju101/blog-service
-    newTag: main-81fed50
+    newTag: main-cda2adf
   - name: dongju101/auth-service
-    newTag: main-81fed50
+    newTag: main-cda2adf
   - name: dongju101/api-gateway
-    newTag: main-4107225
+    newTag: main-cda2adf
 
 # Resource modifications
 replicas:
