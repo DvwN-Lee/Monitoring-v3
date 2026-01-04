@@ -164,12 +164,50 @@ kubectl get gateway -n titanium-prod
 kubectl get virtualservice -n titanium-prod
 ```
 
+## HTTPS/TLS 설정
+
+Istio Gateway는 HTTPS (port 443)를 지원합니다. Self-signed 인증서를 사용한 설정 방법:
+
+### 1. TLS 인증서 생성
+
+```bash
+# 스크립트 실행
+./scripts/generate-tls-cert.sh
+
+# 또는 수동으로 생성
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout tls.key -out tls.crt \
+  -subj "/CN=titanium.local/O=Titanium"
+
+kubectl create secret tls titanium-tls-credential \
+  --key=tls.key --cert=tls.crt \
+  -n istio-system
+```
+
+### 2. HTTPS 접속 테스트
+
+```bash
+# Self-signed 인증서이므로 -k 옵션 사용
+curl -k https://<MASTER_IP>:31443/health
+
+# HTTP 요청은 HTTPS로 redirect됨
+curl -I http://<MASTER_IP>:31080/
+```
+
+### 3. TLS Secret 확인
+
+```bash
+kubectl get secret titanium-tls-credential -n istio-system
+kubectl describe secret titanium-tls-credential -n istio-system
+```
+
 ## 보안 고려사항
 
 1. **Secret 관리**: `secret-patch.yaml` 파일을 Git에 commit하지 마세요
 2. **Firewall**: GCP Firewall Rule이 필요한 Port만 허용하는지 확인하세요
-3. **HTTPS**: Production 환경에서는 Istio Gateway에 TLS 인증서를 설정하세요
+3. **HTTPS**: Istio Gateway에 TLS 인증서가 설정되어 있습니다 (Self-signed)
 4. **Kubeconfig 보안**: Kubeconfig 파일의 권한을 `600`으로 설정하세요
+5. **mTLS**: Istio Service Mesh 내부 통신은 mTLS STRICT 모드로 암호화됩니다
 
 ## 관련 문서
 
