@@ -13,3 +13,13 @@ spec:
                 secretKeyRef:
                   name: prod-app-secrets
                   key: INTERNAL_API_SECRET
+            - name: JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prod-app-secrets
+                  key: JWT_PRIVATE_KEY
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prod-app-secrets
+                  key: JWT_PUBLIC_KEY
