@@ -7,10 +7,23 @@ spec:
   selector:
     istio: ingressgateway
   servers:
+  # HTTPS Server (Primary)
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: titanium-tls-credential
+    hosts:
+    - "*"
+  # HTTP Server (Redirect to HTTPS)
   - port:
       number: 80
       name: http
       protocol: HTTP
+    tls:
+      httpsRedirect: true
     hosts:
     - "*"
 ---

@@ -112,6 +112,48 @@ kubectl create secret generic postgresql-secret \
   --namespace=titanium-prod \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# Generate JWT RS256 Key Pair for auth-service
+log "Generating JWT RS256 key pair..."
+JWT_TEMP_DIR=$(mktemp -d)
+openssl genrsa -out "$JWT_TEMP_DIR/jwt-private.pem" 2048 2>/dev/null
+openssl rsa -in "$JWT_TEMP_DIR/jwt-private.pem" -pubout -out "$JWT_TEMP_DIR/jwt-public.pem" 2>/dev/null
+JWT_PRIVATE_KEY=$(base64 -w0 "$JWT_TEMP_DIR/jwt-private.pem")
+JWT_PUBLIC_KEY=$(base64 -w0 "$JWT_TEMP_DIR/jwt-public.pem")
+rm -rf "$JWT_TEMP_DIR"
+
+# Create app-secrets with JWT RS256 keys
+log "Creating app-secrets with JWT RS256 keys..."
+kubectl create secret generic prod-app-secrets \
+  --from-literal=POSTGRES_USER=postgres \
+  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+  --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+  --from-literal=JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
+  --from-literal=JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
+  --from-literal=INTERNAL_API_SECRET="$(openssl rand -hex 32)" \
+  --from-literal=REDIS_PASSWORD="$(openssl rand -hex 16)" \
+  --namespace=titanium-prod \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Generate TLS Certificate for Istio Gateway
+log "Generating TLS certificate for Istio Gateway..."
+TLS_TEMP_DIR=$(mktemp -d)
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout "$TLS_TEMP_DIR/tls.key" \
+  -out "$TLS_TEMP_DIR/tls.crt" \
+  -subj "/CN=titanium.local/O=Titanium" \
+  -addext "subjectAltName=DNS:titanium.local,DNS:*.titanium.local,DNS:localhost,IP:$PUBLIC_IP" 2>/dev/null
+
+# Create TLS Secret in istio-system namespace
+log "Creating TLS secret in istio-system..."
+kubectl create namespace istio-system --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret tls titanium-tls-credential \
+  --key="$TLS_TEMP_DIR/tls.key" \
+  --cert="$TLS_TEMP_DIR/tls.crt" \
+  --namespace=istio-system \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -rf "$TLS_TEMP_DIR"
+log "TLS and JWT secrets created successfully"
+
 # Create ArgoCD Application for titanium-prod
 log "Creating ArgoCD Application for titanium-prod..."
 cat <<EOFAPP | kubectl apply -f -
