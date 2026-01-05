@@ -125,12 +125,14 @@ variable "grafana_admin_password" {
 variable "helm_versions" {
   description = "Helm chart versions for installed components"
   type = object({
+    argocd          = string
     istio           = string
     loki_stack      = string
     kube_prometheus = string
     kiali           = string
   })
   default = {
+    argocd          = "v3.2.3"
     istio           = "1.24.2"
     loki_stack      = "2.10.2"
     kube_prometheus = "79.5.0"

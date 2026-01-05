@@ -92,6 +92,10 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   zone               = var.zone
   target_size        = var.worker_count
 
+  # Destroy 시 인스턴스 삭제 완료 대기
+  wait_for_instances        = true
+  wait_for_instances_status = "STABLE"
+
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
   }
