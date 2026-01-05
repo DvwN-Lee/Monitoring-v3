@@ -19,6 +19,7 @@ GITOPS_REPO_URL="${gitops_repo_url}"
 GITOPS_TARGET_REVISION="${gitops_target_revision}"
 
 # Helm Chart Versions
+ARGOCD_VERSION="${helm_versions.argocd}"
 ISTIO_VERSION="${helm_versions.istio}"
 LOKI_STACK_VERSION="${helm_versions.loki_stack}"
 KUBE_PROMETHEUS_VERSION="${helm_versions.kube_prometheus}"
@@ -87,10 +88,9 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace titanium-prod --dry-run=client -o yaml | kubectl apply -f -
 
-# Install ArgoCD (version pinned for stability)
-ARGOCD_VERSION="v3.2.3"
-log "Installing ArgoCD ${ARGOCD_VERSION}..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
+# Install ArgoCD
+log "Installing ArgoCD $ARGOCD_VERSION..."
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_VERSION/manifests/install.yaml
 
 # Wait for ArgoCD to be ready
 log "Waiting for ArgoCD deployments..."
