@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ const (
 	DefaultMasterDiskSize   = 30
 	DefaultWorkerDiskSize   = 40
 	TestPostgresPassword    = "TerratestPassword123!"
+	TestGrafanaPassword     = "TerratestGrafana123!"
 	SSHUsername             = "ubuntu"
 )
 
@@ -132,6 +134,7 @@ func GetTestTerraformVars() map[string]interface{} {
 		"worker_disk_size":       DefaultWorkerDiskSize,
 		"use_spot_for_workers":   true,
 		"postgres_password":      TestPostgresPassword,
+		"grafana_admin_password": TestGrafanaPassword,
 		"ssh_public_key_path":    filepath.Join(homeDir, ".ssh", "titanium-key.pub"),
 	}
 }
@@ -1000,7 +1003,7 @@ func VerifyLokiReady(t *testing.T, host ssh.Host) error {
 func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
 	command := `curl -s "http://localhost:31200/healthz"`
 
-	output, err := RunSSHCommand(t, host, command)
+	_, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return fmt.Errorf("Kiali health check 실패: %v", err)
 	}
