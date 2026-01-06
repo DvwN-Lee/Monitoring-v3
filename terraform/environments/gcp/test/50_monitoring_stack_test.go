@@ -3,7 +3,6 @@ package test
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/gruntwork-io/terratest/modules/ssh"
 	"github.com/gruntwork-io/terratest/modules/terraform"
@@ -28,10 +27,14 @@ func TestMonitoringStackValidation(t *testing.T) {
 	privateKeyPath, _ := GetSSHKeyPairPath()
 	host := CreateSSHHost(t, masterPublicIP, privateKeyPath)
 
-	// Monitoring Stack이 완전히 준비될 때까지 대기
-	// Bootstrap Timeline: k3s(2-3min) + ArgoCD(3-5min) + App sync(2-3min) = ~10min
-	t.Log("Monitoring Stack 준비 대기 중 (7분)...")
-	time.Sleep(7 * time.Minute)
+	// Monitoring Stack이 완전히 준비될 때까지 단계별 대기 (Issue #27)
+	// 1단계: Bootstrap 초기 대기 (7분)
+	// 2단계: Application Pod Ready 확인 (최대 3분)
+	err := WaitForMonitoringStackReady(t, host)
+	if err != nil {
+		t.Logf("경고: Monitoring Stack 준비 대기 중 문제 발생: %v", err)
+		// 경고만 기록하고 테스트는 계속 진행 (개별 Health Check에서 재시도)
+	}
 
 	t.Run("PrometheusHealth", func(t *testing.T) { testPrometheusHealth(t, host) })
 	t.Run("PrometheusTargets", func(t *testing.T) { testPrometheusTargets(t, host) })
@@ -47,8 +50,8 @@ func TestMonitoringStackValidation(t *testing.T) {
 func testPrometheusHealth(t *testing.T, host ssh.Host) {
 	t.Log("Prometheus health 검증 시작")
 
-	err := VerifyPrometheusHealthy(t, host)
-	require.NoError(t, err, "Prometheus health check 실패")
+	err := VerifyPrometheusHealthyWithRetry(t, host)
+	require.NoError(t, err, "Prometheus health check 실패 (재시도 후)")
 
 	t.Log("Prometheus가 healthy 상태입니다")
 }
@@ -65,8 +68,8 @@ func testPrometheusTargets(t *testing.T, host ssh.Host) {
 		"serviceMonitor/monitoring/prometheus-prometheus-node-exporter/0",
 	}
 
-	err := VerifyPrometheusTargetsUp(t, host, "31090", requiredJobs)
-	require.NoError(t, err, "Prometheus targets 검증 실패")
+	err := VerifyPrometheusTargetsUpWithRetry(t, host, "31090", requiredJobs)
+	require.NoError(t, err, "Prometheus targets 검증 실패 (재시도 후)")
 
 	t.Log("모든 필수 Prometheus targets가 UP 상태입니다")
 }
@@ -86,8 +89,8 @@ func testPrometheusMetrics(t *testing.T, host ssh.Host) {
 	for name, query := range testQueries {
 		t.Logf("Metric 쿼리 실행: %s", name)
 
-		resultCount, err := QueryPrometheusMetric(t, host, query)
-		require.NoError(t, err, fmt.Sprintf("Metric '%s' 쿼리 실패", name))
+		resultCount, err := QueryPrometheusMetricWithRetry(t, host, query)
+		require.NoError(t, err, fmt.Sprintf("Metric '%s' 쿼리 실패 (재시도 후)", name))
 		assert.Greater(t, resultCount, 0, fmt.Sprintf("Metric '%s'의 결과가 0개입니다", name))
 
 		t.Logf("Metric '%s': %d개 결과 확인", name, resultCount)
@@ -100,8 +103,8 @@ func testPrometheusMetrics(t *testing.T, host ssh.Host) {
 func testGrafanaHealth(t *testing.T, host ssh.Host) {
 	t.Log("Grafana health 검증 시작")
 
-	err := VerifyGrafanaHealthy(t, host)
-	require.NoError(t, err, "Grafana health check 실패")
+	err := VerifyGrafanaHealthyWithRetry(t, host)
+	require.NoError(t, err, "Grafana health check 실패 (재시도 후)")
 
 	t.Log("Grafana가 healthy 상태입니다")
 }
@@ -112,8 +115,8 @@ func testGrafanaDataSources(t *testing.T, host ssh.Host) {
 
 	requiredSources := []string{"Prometheus", "Loki"}
 
-	err := VerifyGrafanaDataSources(t, host, requiredSources)
-	require.NoError(t, err, "Grafana DataSource 검증 실패")
+	err := VerifyGrafanaDataSourcesWithRetry(t, host, requiredSources)
+	require.NoError(t, err, "Grafana DataSource 검증 실패 (재시도 후)")
 
 	t.Logf("모든 필수 DataSource가 연결되어 있습니다: %v", requiredSources)
 }
@@ -122,8 +125,8 @@ func testGrafanaDataSources(t *testing.T, host ssh.Host) {
 func testLokiHealth(t *testing.T, host ssh.Host) {
 	t.Log("Loki health 검증 시작")
 
-	err := VerifyLokiReady(t, host)
-	require.NoError(t, err, "Loki ready check 실패")
+	err := VerifyLokiReadyWithRetry(t, host)
+	require.NoError(t, err, "Loki ready check 실패 (재시도 후)")
 
 	t.Log("Loki가 ready 상태입니다")
 }
@@ -132,8 +135,8 @@ func testLokiHealth(t *testing.T, host ssh.Host) {
 func testKialiHealth(t *testing.T, host ssh.Host) {
 	t.Log("Kiali health 검증 시작")
 
-	err := VerifyKialiHealthy(t, host)
-	require.NoError(t, err, "Kiali health check 실패")
+	err := VerifyKialiHealthyWithRetry(t, host)
+	require.NoError(t, err, "Kiali health check 실패 (재시도 후)")
 
 	t.Log("Kiali가 healthy 상태입니다")
 }
@@ -142,8 +145,8 @@ func testKialiHealth(t *testing.T, host ssh.Host) {
 func testKialiNamespaces(t *testing.T, host ssh.Host) {
 	t.Log("Kiali namespaces 검증 시작")
 
-	namespaces, err := GetKialiNamespaces(t, host)
-	require.NoError(t, err, "Kiali namespace 조회 실패")
+	namespaces, err := GetKialiNamespacesWithRetry(t, host)
+	require.NoError(t, err, "Kiali namespace 조회 실패 (재시도 후)")
 
 	// 필수 namespace 확인
 	requiredNamespaces := []string{"istio-system", "monitoring"}

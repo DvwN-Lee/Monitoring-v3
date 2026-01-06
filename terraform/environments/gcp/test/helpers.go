@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/random"
+	"github.com/gruntwork-io/terratest/modules/retry"
 	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/ssh"
 	"github.com/gruntwork-io/terratest/modules/terraform"
@@ -42,6 +43,12 @@ const (
 	SSHTimeBetweenRetries = 10 * time.Second
 	K3sBootstrapTimeout   = 15 * time.Minute
 	DefaultTimeout        = 30 * time.Second
+
+	// Monitoring Stack 재시도 설정 (Issue #27)
+	MonitoringStackInitialWait    = 7 * time.Minute  // Bootstrap 초기 대기
+	MonitoringAppReadyWait        = 3 * time.Minute  // Application Pod Ready 대기
+	MonitoringHealthCheckRetries  = 3                // Health Check 재시도 횟수
+	MonitoringHealthCheckInterval = 20 * time.Second // Health Check 재시도 간격
 )
 
 // GetTerraformDir terraform 디렉터리 경로 반환
@@ -1011,4 +1018,169 @@ func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
 	// Kiali healthz는 빈 응답 또는 JSON 반환
 	// 에러가 없으면 정상으로 간주
 	return nil
+}
+
+// ============================================================================
+// Monitoring Stack 재시도 Helper 함수 (Issue #27)
+// ============================================================================
+
+// WaitForMonitoringStackReady Monitoring Stack 단계별 대기
+// 1단계: Bootstrap 완료 대기 (7분)
+// 2단계: Application Pod Ready 대기 (최대 3분)
+func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
+	// 1단계: Bootstrap 완료 대기
+	t.Logf("Monitoring Stack Bootstrap 대기 중 (%v)...", MonitoringStackInitialWait)
+	time.Sleep(MonitoringStackInitialWait)
+
+	// 2단계: monitoring namespace Pod Ready 확인
+	t.Logf("Application Pod Ready 대기 중 (최대 %v)...", MonitoringAppReadyWait)
+
+	maxRetries := int(MonitoringAppReadyWait / (10 * time.Second))
+	sleepBetweenRetries := 10 * time.Second
+
+	_, err := retry.DoWithRetryE(t, "Monitoring Pod Ready 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
+		// monitoring namespace의 Running Pod 개수 확인
+		command := `sudo kubectl get pods -n monitoring --no-headers 2>/dev/null | grep -c 'Running' || echo '0'`
+		output, err := RunSSHCommand(t, host, command)
+		if err != nil {
+			return "", fmt.Errorf("Pod 상태 확인 실패: %v", err)
+		}
+
+		runningCount := 0
+		fmt.Sscanf(strings.TrimSpace(output), "%d", &runningCount)
+
+		// 최소 3개 이상의 Pod가 Running이어야 함 (Prometheus, Grafana, Loki 등)
+		if runningCount < 3 {
+			return "", fmt.Errorf("Running Pod 부족: %d/3", runningCount)
+		}
+
+		t.Logf("Monitoring namespace: %d개 Pod Running", runningCount)
+		return output, nil
+	})
+
+	return err
+}
+
+// VerifyPrometheusHealthyWithRetry Prometheus Health Check (재시도 포함)
+func VerifyPrometheusHealthyWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Prometheus Health Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyPrometheusHealthy(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "healthy", nil
+		})
+	return err
+}
+
+// VerifyGrafanaHealthyWithRetry Grafana Health Check (재시도 포함)
+func VerifyGrafanaHealthyWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Grafana Health Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyGrafanaHealthy(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "healthy", nil
+		})
+	return err
+}
+
+// VerifyLokiReadyWithRetry Loki Ready Check (재시도 포함)
+func VerifyLokiReadyWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Loki Ready Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyLokiReady(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "ready", nil
+		})
+	return err
+}
+
+// VerifyKialiHealthyWithRetry Kiali Health Check (재시도 포함)
+func VerifyKialiHealthyWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Kiali Health Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyKialiHealthy(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "healthy", nil
+		})
+	return err
+}
+
+// VerifyPrometheusTargetsUpWithRetry Prometheus Targets Check (재시도 포함)
+func VerifyPrometheusTargetsUpWithRetry(t *testing.T, host ssh.Host, prometheusNodePort string, requiredJobs []string) error {
+	_, err := retry.DoWithRetryE(t, "Prometheus Targets Up Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyPrometheusTargetsUp(t, host, prometheusNodePort, requiredJobs)
+			if err != nil {
+				return "", err
+			}
+			return "targets up", nil
+		})
+	return err
+}
+
+// VerifyGrafanaDataSourcesWithRetry Grafana DataSources Check (재시도 포함)
+func VerifyGrafanaDataSourcesWithRetry(t *testing.T, host ssh.Host, sources []string) error {
+	_, err := retry.DoWithRetryE(t, "Grafana DataSources Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyGrafanaDataSources(t, host, sources)
+			if err != nil {
+				return "", err
+			}
+			return "datasources connected", nil
+		})
+	return err
+}
+
+// QueryPrometheusMetricWithRetry Prometheus Metric Query (재시도 포함)
+func QueryPrometheusMetricWithRetry(t *testing.T, host ssh.Host, query string) (int, error) {
+	var resultCount int
+	_, err := retry.DoWithRetryE(t, fmt.Sprintf("Prometheus Metric Query: %s", query),
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			count, err := QueryPrometheusMetric(t, host, query)
+			if err != nil {
+				return "", err
+			}
+			resultCount = count
+			return fmt.Sprintf("%d results", count), nil
+		})
+	return resultCount, err
+}
+
+// GetKialiNamespacesWithRetry Kiali Namespaces 조회 (재시도 포함)
+func GetKialiNamespacesWithRetry(t *testing.T, host ssh.Host) ([]string, error) {
+	var namespaces []string
+	_, err := retry.DoWithRetryE(t, "Kiali Namespaces Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			ns, err := GetKialiNamespaces(t, host)
+			if err != nil {
+				return "", err
+			}
+			namespaces = ns
+			return fmt.Sprintf("%d namespaces", len(ns)), nil
+		})
+	return namespaces, err
 }
