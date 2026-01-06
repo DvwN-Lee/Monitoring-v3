@@ -28,14 +28,12 @@ func TestMonitoringStackValidation(t *testing.T) {
 	host := CreateSSHHost(t, masterPublicIP, privateKeyPath)
 
 	// Monitoring Stack이 완전히 준비될 때까지 단계별 대기 (Issue #27)
-	// 1단계: Bootstrap 초기 대기 (7분)
-	// 2단계: Application Pod Ready 확인 (최대 3분)
+	// 1단계: ArgoCD Application Healthy 대기 (최대 10분)
+	// 2단계: Monitoring Pod Ready 확인 (최대 3분)
 	err := WaitForMonitoringStackReady(t, host)
-	if err != nil {
-		t.Logf("경고: Monitoring Stack 준비 대기 중 문제 발생: %v", err)
-		// 경고만 기록하고 테스트는 계속 진행 (개별 Health Check에서 재시도)
-	}
+	require.NoError(t, err, "Monitoring Stack 준비 실패")
 
+	// Monitoring Stack Subtests
 	t.Run("PrometheusHealth", func(t *testing.T) { testPrometheusHealth(t, host) })
 	t.Run("PrometheusTargets", func(t *testing.T) { testPrometheusTargets(t, host) })
 	t.Run("PrometheusMetrics", func(t *testing.T) { testPrometheusMetrics(t, host) })
@@ -44,6 +42,10 @@ func TestMonitoringStackValidation(t *testing.T) {
 	t.Run("LokiHealth", func(t *testing.T) { testLokiHealth(t, host) })
 	t.Run("KialiHealth", func(t *testing.T) { testKialiHealth(t, host) })
 	t.Run("KialiNamespaces", func(t *testing.T) { testKialiNamespaces(t, host) })
+
+	// Application Subtests (Issue #27)
+	t.Run("ApplicationPodsReady", func(t *testing.T) { testApplicationPodsReady(t, host) })
+	t.Run("ApplicationHealth", func(t *testing.T) { testApplicationHealth(t, host) })
 }
 
 // testPrometheusHealth Prometheus 서버 health 상태 확인
@@ -160,4 +162,24 @@ func testKialiNamespaces(t *testing.T, host ssh.Host) {
 	}
 
 	t.Logf("Kiali에서 %d개 namespace를 관리하고 있습니다", len(namespaces))
+}
+
+// testApplicationPodsReady Application Pod Ready 상태 확인
+func testApplicationPodsReady(t *testing.T, host ssh.Host) {
+	t.Log("Application Pods Ready 검증 시작")
+
+	err := VerifyApplicationPodsReadyWithRetry(t, host)
+	require.NoError(t, err, "Application Pods Ready 검증 실패 (재시도 후)")
+
+	t.Log("모든 Application Pod가 Ready 상태입니다")
+}
+
+// testApplicationHealth Application Health endpoint 확인
+func testApplicationHealth(t *testing.T, host ssh.Host) {
+	t.Log("Application Health 검증 시작")
+
+	err := VerifyApplicationHealthWithRetry(t, host)
+	require.NoError(t, err, "Application Health 검증 실패 (재시도 후)")
+
+	t.Log("모든 Application이 healthy 상태입니다")
 }

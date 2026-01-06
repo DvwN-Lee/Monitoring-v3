@@ -47,7 +47,7 @@ const (
 	// Monitoring Stack 재시도 설정 (Issue #27)
 	MonitoringStackInitialWait    = 7 * time.Minute  // Bootstrap 초기 대기
 	MonitoringAppReadyWait        = 3 * time.Minute  // Application Pod Ready 대기
-	MonitoringHealthCheckRetries  = 3                // Health Check 재시도 횟수
+	MonitoringHealthCheckRetries  = 6                // Health Check 재시도 횟수 (3 -> 6)
 	MonitoringHealthCheckInterval = 20 * time.Second // Health Check 재시도 간격
 )
 
@@ -1025,22 +1025,45 @@ func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
 // ============================================================================
 
 // WaitForMonitoringStackReady Monitoring Stack 단계별 대기
-// 1단계: Bootstrap 완료 대기 (7분)
-// 2단계: Application Pod Ready 대기 (최대 3분)
+// 1단계: ArgoCD Application Healthy 상태 대기 (최대 10분)
+// 2단계: Monitoring Pod Ready 확인 (최대 3분)
 func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
-	// 1단계: Bootstrap 완료 대기
-	t.Logf("Monitoring Stack Bootstrap 대기 중 (%v)...", MonitoringStackInitialWait)
-	time.Sleep(MonitoringStackInitialWait)
+	// 1단계: ArgoCD monitoring-stack Application Healthy 대기 (기존 7분 Sleep 대체)
+	t.Log("ArgoCD monitoring-stack Application Healthy 대기 중 (최대 10분)...")
 
-	// 2단계: monitoring namespace Pod Ready 확인
-	t.Logf("Application Pod Ready 대기 중 (최대 %v)...", MonitoringAppReadyWait)
+	bootstrapRetries := 60 // 10초 간격 * 60 = 10분
+	bootstrapInterval := 10 * time.Second
+
+	_, err := retry.DoWithRetryE(t, "ArgoCD monitoring-stack Healthy 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
+		// ArgoCD Application 상태 확인
+		command := `sudo kubectl get application monitoring-stack -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`
+		output, err := RunSSHCommand(t, host, command)
+		if err != nil {
+			return "", fmt.Errorf("ArgoCD Application 상태 확인 실패: %v", err)
+		}
+
+		status := strings.TrimSpace(output)
+		if status != "Healthy" {
+			return "", fmt.Errorf("monitoring-stack 상태: %s (Healthy 대기 중)", status)
+		}
+
+		t.Log("ArgoCD monitoring-stack Application이 Healthy 상태입니다")
+		return status, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("ArgoCD monitoring-stack Healthy 대기 실패: %v", err)
+	}
+
+	// 2단계: monitoring namespace Pod Ready 확인 (jsonpath 사용)
+	t.Logf("Monitoring Pod Ready 대기 중 (최대 %v)...", MonitoringAppReadyWait)
 
 	maxRetries := int(MonitoringAppReadyWait / (10 * time.Second))
 	sleepBetweenRetries := 10 * time.Second
 
-	_, err := retry.DoWithRetryE(t, "Monitoring Pod Ready 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
-		// monitoring namespace의 Running Pod 개수 확인
-		command := `sudo kubectl get pods -n monitoring --no-headers 2>/dev/null | grep -c 'Running' || echo '0'`
+	_, err = retry.DoWithRetryE(t, "Monitoring Pod Ready 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
+		// jsonpath로 Running Pod 개수 확인
+		command := `sudo kubectl get pods -n monitoring -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' 2>/dev/null | wc -w`
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
 			return "", fmt.Errorf("Pod 상태 확인 실패: %v", err)
@@ -1183,4 +1206,91 @@ func GetKialiNamespacesWithRetry(t *testing.T, host ssh.Host) ([]string, error) 
 			return fmt.Sprintf("%d namespaces", len(ns)), nil
 		})
 	return namespaces, err
+}
+
+// ============================================================================
+// Application Pod 검증 함수 (Issue #27)
+// ============================================================================
+
+// VerifyApplicationPodsReady prod namespace의 Application Pod Ready 상태 확인
+func VerifyApplicationPodsReady(t *testing.T, host ssh.Host) error {
+	// 필수 Application Pod 목록
+	requiredPods := []string{
+		"api-gateway",
+		"auth-service",
+		"blog-service",
+		"user-service",
+	}
+
+	for _, podPrefix := range requiredPods {
+		// jsonpath로 Pod Ready 상태 확인
+		command := fmt.Sprintf(`sudo kubectl get pods -n prod -l app=%s -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo 'Unknown'`, podPrefix)
+		output, err := RunSSHCommand(t, host, command)
+		if err != nil {
+			return fmt.Errorf("%s Pod 상태 확인 실패: %v", podPrefix, err)
+		}
+
+		status := strings.TrimSpace(output)
+		if status != "True" {
+			return fmt.Errorf("%s Pod가 Ready 상태가 아님: %s", podPrefix, status)
+		}
+	}
+
+	return nil
+}
+
+// VerifyApplicationHealth Application Health endpoint 확인
+func VerifyApplicationHealth(t *testing.T, host ssh.Host) error {
+	// Health Check 대상 서비스
+	services := map[string]string{
+		"api-gateway":  "31080",
+		"auth-service": "31081",
+		"user-service": "31082",
+		"blog-service": "31083",
+	}
+
+	for name, port := range services {
+		command := fmt.Sprintf(`curl -s -o /dev/null -w '%%{http_code}' --connect-timeout 5 "http://localhost:%s/health" 2>/dev/null || echo '000'`, port)
+		output, err := RunSSHCommand(t, host, command)
+		if err != nil {
+			return fmt.Errorf("%s health check 실패: %v", name, err)
+		}
+
+		statusCode := strings.TrimSpace(output)
+		if statusCode != "200" {
+			return fmt.Errorf("%s health check 실패: HTTP %s", name, statusCode)
+		}
+	}
+
+	return nil
+}
+
+// VerifyApplicationPodsReadyWithRetry Application Pod Ready 확인 (재시도 포함)
+func VerifyApplicationPodsReadyWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Application Pods Ready Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyApplicationPodsReady(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "pods ready", nil
+		})
+	return err
+}
+
+// VerifyApplicationHealthWithRetry Application Health 확인 (재시도 포함)
+func VerifyApplicationHealthWithRetry(t *testing.T, host ssh.Host) error {
+	_, err := retry.DoWithRetryE(t, "Application Health Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyApplicationHealth(t, host)
+			if err != nil {
+				return "", err
+			}
+			return "healthy", nil
+		})
+	return err
 }
