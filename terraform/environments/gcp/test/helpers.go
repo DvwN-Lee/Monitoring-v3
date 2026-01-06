@@ -49,6 +49,9 @@ const (
 	MonitoringAppReadyWait        = 3 * time.Minute  // Application Pod Ready 대기
 	MonitoringHealthCheckRetries  = 6                // Health Check 재시도 횟수 (3 -> 6)
 	MonitoringHealthCheckInterval = 20 * time.Second // Health Check 재시도 간격
+
+	// Application 관련 상수 (Issue #27 - 2차 리뷰)
+	NamespaceProd = "titanium-prod"
 )
 
 // GetTerraformDir terraform 디렉터리 경로 반환
@@ -1034,20 +1037,20 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 	bootstrapRetries := 60 // 10초 간격 * 60 = 10분
 	bootstrapInterval := 10 * time.Second
 
-	_, err := retry.DoWithRetryE(t, "ArgoCD monitoring-stack Healthy 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
-		// ArgoCD Application 상태 확인
-		command := `sudo kubectl get application monitoring-stack -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`
+	_, err := retry.DoWithRetryE(t, "ArgoCD monitoring-stack Healthy+Synced 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
+		// ArgoCD Application 상태 확인 (Healthy + Synced 동시 확인)
+		command := `sudo kubectl get application monitoring-stack -n argocd -o jsonpath='{.status.health.status},{.status.sync.status}' 2>/dev/null || echo 'Unknown,Unknown'`
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
 			return "", fmt.Errorf("ArgoCD Application 상태 확인 실패: %v", err)
 		}
 
 		status := strings.TrimSpace(output)
-		if status != "Healthy" {
-			return "", fmt.Errorf("monitoring-stack 상태: %s (Healthy 대기 중)", status)
+		if status != "Healthy,Synced" {
+			return "", fmt.Errorf("monitoring-stack 상태: %s (Healthy,Synced 대기 중)", status)
 		}
 
-		t.Log("ArgoCD monitoring-stack Application이 Healthy 상태입니다")
+		t.Log("ArgoCD monitoring-stack Application이 Healthy,Synced 상태입니다")
 		return status, nil
 	})
 
@@ -1212,7 +1215,8 @@ func GetKialiNamespacesWithRetry(t *testing.T, host ssh.Host) ([]string, error) 
 // Application Pod 검증 함수 (Issue #27)
 // ============================================================================
 
-// VerifyApplicationPodsReady prod namespace의 Application Pod Ready 상태 확인
+// VerifyApplicationPodsReady titanium-prod namespace의 Application Pod Ready 상태 확인
+// kubectl wait 사용으로 모든 레플리카 검증 (Issue #27 - 2차 리뷰)
 func VerifyApplicationPodsReady(t *testing.T, host ssh.Host) error {
 	// 필수 Application Pod 목록
 	requiredPods := []string{
@@ -1223,17 +1227,14 @@ func VerifyApplicationPodsReady(t *testing.T, host ssh.Host) error {
 	}
 
 	for _, podPrefix := range requiredPods {
-		// jsonpath로 Pod Ready 상태 확인
-		command := fmt.Sprintf(`sudo kubectl get pods -n prod -l app=%s -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo 'Unknown'`, podPrefix)
+		// kubectl wait 사용으로 모든 레플리카가 Ready 상태인지 확인
+		command := fmt.Sprintf(`sudo kubectl wait --for=condition=ready pod -l app=%s -n %s --timeout=30s 2>&1`, podPrefix, NamespaceProd)
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
-			return fmt.Errorf("%s Pod 상태 확인 실패: %v", podPrefix, err)
+			return fmt.Errorf("%s Pod Ready 대기 실패: %v (output: %s)", podPrefix, err, strings.TrimSpace(output))
 		}
 
-		status := strings.TrimSpace(output)
-		if status != "True" {
-			return fmt.Errorf("%s Pod가 Ready 상태가 아님: %s", podPrefix, status)
-		}
+		t.Logf("%s Pod가 Ready 상태입니다", podPrefix)
 	}
 
 	return nil
