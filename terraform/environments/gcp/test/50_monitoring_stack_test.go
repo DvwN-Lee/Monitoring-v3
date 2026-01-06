@@ -29,8 +29,9 @@ func TestMonitoringStackValidation(t *testing.T) {
 	host := CreateSSHHost(t, masterPublicIP, privateKeyPath)
 
 	// Monitoring Stack이 완전히 준비될 때까지 대기
-	t.Log("Monitoring Stack 준비 대기 중...")
-	time.Sleep(3 * time.Minute)
+	// Bootstrap Timeline: k3s(2-3min) + ArgoCD(3-5min) + App sync(2-3min) = ~10min
+	t.Log("Monitoring Stack 준비 대기 중 (7분)...")
+	time.Sleep(7 * time.Minute)
 
 	t.Run("PrometheusHealth", func(t *testing.T) { testPrometheusHealth(t, host) })
 	t.Run("PrometheusTargets", func(t *testing.T) { testPrometheusTargets(t, host) })
