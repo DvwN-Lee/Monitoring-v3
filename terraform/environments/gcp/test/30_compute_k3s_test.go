@@ -60,27 +60,38 @@ func TestComputeAndK3s(t *testing.T) {
 	t.Logf("Master Private IP: %s", masterPrivateIP)
 	t.Logf("Cluster Name: %s", clusterName)
 
+	// terraformOptions에서 project_id, zone 추출 (Worker 테스트에서 사용)
+	projectID := terraformOptions.Vars["project_id"].(string)
+	zone := terraformOptions.Vars["zone"].(string)
+
 	// Sub-tests
 	t.Run("MasterInstanceSpec", func(t *testing.T) {
 		testInstanceSpec(t, clusterName+"-master", DefaultMasterMachineType, DefaultMasterDiskSize)
 	})
 
 	t.Run("WorkerInstanceSpec", func(t *testing.T) {
-		for i := 0; i < DefaultWorkerCount; i++ {
-			workerName := fmt.Sprintf("%s-worker-%d", clusterName, i+1)
-			testInstanceSpec(t, workerName, DefaultWorkerMachineType, DefaultWorkerDiskSize)
+		// MIG에서 생성된 Worker 인스턴스 동적 조회
+		workerNames, err := GetWorkerInstanceNamesWithRetry(t, clusterName, projectID, zone, DefaultWorkerCount)
+		require.NoError(t, err, "Worker 인스턴스 목록 조회 실패")
+		require.Len(t, workerNames, DefaultWorkerCount, "Worker 인스턴스 개수 불일치")
+
+		for _, workerName := range workerNames {
+			t.Run(workerName, func(t *testing.T) {
+				testInstanceSpec(t, workerName, DefaultWorkerMachineType, DefaultWorkerDiskSize)
+			})
 		}
 	})
 
 	// Spot Instance 검증 (Worker만 Spot)
-	// terraformOptions에서 project_id, zone 추출
-	projectID := terraformOptions.Vars["project_id"].(string)
-	zone := terraformOptions.Vars["zone"].(string)
-
 	t.Run("WorkerSpotInstance", func(t *testing.T) {
-		for i := 0; i < DefaultWorkerCount; i++ {
-			workerName := fmt.Sprintf("%s-worker-%d", clusterName, i+1)
-			testSpotInstanceConfig(t, workerName, projectID, zone)
+		// MIG에서 생성된 Worker 인스턴스 동적 조회
+		workerNames, err := GetWorkerInstanceNames(t, clusterName, projectID, zone)
+		require.NoError(t, err, "Worker 인스턴스 목록 조회 실패")
+
+		for _, workerName := range workerNames {
+			t.Run(workerName, func(t *testing.T) {
+				testSpotInstanceConfig(t, workerName, projectID, zone)
+			})
 		}
 	})
 

@@ -44,9 +44,9 @@ const (
 	K3sBootstrapTimeout   = 15 * time.Minute
 	DefaultTimeout        = 30 * time.Second
 
-	// Monitoring Stack 재시도 설정 (Issue #27)
+	// Monitoring Stack 재시도 설정 (Issue #27, #29)
 	MonitoringStackInitialWait    = 7 * time.Minute  // Bootstrap 초기 대기
-	MonitoringAppReadyWait        = 3 * time.Minute  // Application Pod Ready 대기
+	MonitoringAppReadyWait        = 5 * time.Minute  // Application Pod Ready 대기 (3분 -> 5분, Loki/Prometheus 초기화 고려)
 	MonitoringHealthCheckRetries  = 6                // Health Check 재시도 횟수 (3 -> 6)
 	MonitoringHealthCheckInterval = 20 * time.Second // Health Check 재시도 간격
 
@@ -95,6 +95,20 @@ func createSSHTfvars(t *testing.T, ip string) string {
 		return ""
 	}
 	t.Logf("tfvars 파일 생성: %s", absPath)
+	return absPath
+}
+
+// createSSHTfvarsInDir 지정된 디렉터리에 SSH tfvars 파일 생성 (격리용)
+func createSSHTfvarsInDir(t *testing.T, ip string, targetDir string) string {
+	tfvarsContent := fmt.Sprintf(`ssh_allowed_cidrs = ["%s/32"]`, ip)
+	absPath := filepath.Join(targetDir, "test-ssh.auto.tfvars")
+
+	err := os.WriteFile(absPath, []byte(tfvarsContent), 0644)
+	if err != nil {
+		t.Logf("tfvars 파일 생성 실패: %v", err)
+		return ""
+	}
+	t.Logf("tfvars 파일 생성 (격리): %s", absPath)
 	return absPath
 }
 
@@ -358,6 +372,12 @@ func GetIsolatedTerraformOptions(t *testing.T) (*terraform.Options, string) {
 		NoColor:            true,
 	}
 
+	// 격리된 임시 디렉터리에 SSH tfvars 생성 (Race condition 방지)
+	if ip, err := GetCurrentPublicIP(); err == nil && ip != "" {
+		createSSHTfvarsInDir(t, ip, tempDir)
+		t.Logf("테스트 환경 IP 추가 (격리): %s/32", ip)
+	}
+
 	return opts, clusterName
 }
 
@@ -430,6 +450,72 @@ func VerifySpotInstance(t *testing.T, instanceName, projectID, zone string) (boo
 // VerifySpotInstanceWithDefaults 기본값으로 Spot 인스턴스 검증 (하위 호환성)
 func VerifySpotInstanceWithDefaults(t *testing.T, instanceName string) (bool, error) {
 	return VerifySpotInstance(t, instanceName, DefaultProjectID, DefaultZone)
+}
+
+// ============================================================================
+// Worker 인스턴스 동적 조회 함수 (MIG 지원)
+// ============================================================================
+
+// WorkerInstanceInfo Worker 인스턴스 정보 구조체
+type WorkerInstanceInfo struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// GetWorkerInstanceNames gcloud list 명령으로 Worker 인스턴스 이름 목록 조회
+// MIG에서 생성된 인스턴스는 base_instance_name-{random-suffix} 형식
+func GetWorkerInstanceNames(t *testing.T, clusterName, projectID, zone string) ([]string, error) {
+	filter := fmt.Sprintf("name~'^%s-worker'", clusterName)
+
+	output, err := RunShellCommand(t, "gcloud",
+		"compute", "instances", "list",
+		"--filter", filter,
+		"--project", projectID,
+		"--zones", zone,
+		"--format", "json(name,status)",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Worker 인스턴스 목록 조회 실패: %v", err)
+	}
+
+	var instances []WorkerInstanceInfo
+	if err := json.Unmarshal([]byte(output), &instances); err != nil {
+		return nil, fmt.Errorf("Worker 인스턴스 JSON 파싱 실패: %v", err)
+	}
+
+	var names []string
+	for _, instance := range instances {
+		if instance.Status == "RUNNING" {
+			names = append(names, instance.Name)
+		}
+	}
+
+	return names, nil
+}
+
+// GetWorkerInstanceNamesWithRetry 재시도 로직 포함 Worker 인스턴스 조회
+// MIG 인스턴스 생성 완료까지 대기
+func GetWorkerInstanceNamesWithRetry(t *testing.T, clusterName, projectID, zone string, expectedCount int) ([]string, error) {
+	maxRetries := 30
+	sleepBetweenRetries := 10 * time.Second
+
+	var workerNames []string
+
+	_, err := retry.DoWithRetryE(t, "Worker 인스턴스 RUNNING 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
+		names, err := GetWorkerInstanceNames(t, clusterName, projectID, zone)
+		if err != nil {
+			return "", err
+		}
+
+		if len(names) < expectedCount {
+			return "", fmt.Errorf("RUNNING 상태 Worker 인스턴스 부족: %d/%d", len(names), expectedCount)
+		}
+
+		workerNames = names
+		return fmt.Sprintf("%d workers running", len(names)), nil
+	})
+
+	return workerNames, err
 }
 
 // VerifyIAMLoggingPermission Logging 권한 검증
