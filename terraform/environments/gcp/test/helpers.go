@@ -1031,15 +1031,15 @@ func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
 // 1단계: ArgoCD Application Healthy 상태 대기 (최대 10분)
 // 2단계: Monitoring Pod Ready 확인 (최대 3분)
 func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
-	// 1단계: ArgoCD monitoring-stack Application Healthy 대기 (기존 7분 Sleep 대체)
-	t.Log("ArgoCD monitoring-stack Application Healthy 대기 중 (최대 10분)...")
+	// 1단계: ArgoCD titanium-prod Application Healthy 대기 (기존 7분 Sleep 대체)
+	t.Log("ArgoCD titanium-prod Application Healthy 대기 중 (최대 10분)...")
 
 	bootstrapRetries := 60 // 10초 간격 * 60 = 10분
 	bootstrapInterval := 10 * time.Second
 
-	_, err := retry.DoWithRetryE(t, "ArgoCD monitoring-stack Healthy+Synced 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
+	_, err := retry.DoWithRetryE(t, "ArgoCD titanium-prod Healthy+Synced 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
 		// ArgoCD Application 상태 확인 (Healthy + Synced 동시 확인)
-		command := `sudo kubectl get application monitoring-stack -n argocd -o jsonpath='{.status.health.status},{.status.sync.status}' 2>/dev/null || echo 'Unknown,Unknown'`
+		command := `sudo kubectl get application titanium-prod -n argocd -o jsonpath='{.status.health.status},{.status.sync.status}' 2>/dev/null || echo 'Unknown,Unknown'`
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
 			return "", fmt.Errorf("ArgoCD Application 상태 확인 실패: %v", err)
@@ -1047,15 +1047,15 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 
 		status := strings.TrimSpace(output)
 		if status != "Healthy,Synced" {
-			return "", fmt.Errorf("monitoring-stack 상태: %s (Healthy,Synced 대기 중)", status)
+			return "", fmt.Errorf("titanium-prod 상태: %s (Healthy,Synced 대기 중)", status)
 		}
 
-		t.Log("ArgoCD monitoring-stack Application이 Healthy,Synced 상태입니다")
+		t.Log("ArgoCD titanium-prod Application이 Healthy,Synced 상태입니다")
 		return status, nil
 	})
 
 	if err != nil {
-		return fmt.Errorf("ArgoCD monitoring-stack Healthy 대기 실패: %v", err)
+		return fmt.Errorf("ArgoCD titanium-prod Healthy 대기 실패: %v", err)
 	}
 
 	// 2단계: monitoring namespace Pod Ready 확인 (jsonpath 사용)
