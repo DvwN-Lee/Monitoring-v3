@@ -1113,45 +1113,137 @@ func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
 // Monitoring Stack 재시도 Helper 함수 (Issue #27)
 // ============================================================================
 
-// WaitForMonitoringStackReady Monitoring Stack 단계별 대기
-// 1단계: ArgoCD Application Healthy 상태 대기 (최대 10분)
-// 2단계: Monitoring Pod Ready 확인 (최대 3분)
+// triggerArgoCDSync ArgoCD Application sync 강제 트리거 (Issue #33)
+// OutOfSync 상태가 지속될 경우 수동으로 sync 명령 실행
+func triggerArgoCDSync(t *testing.T, host ssh.Host, appName string) error {
+	t.Logf("ArgoCD Application '%s' sync 트리거 중...", appName)
+	command := fmt.Sprintf(`sudo kubectl -n argocd patch application %s --type=merge -p '{"operation":{"initiatedBy":{"username":"terratest"},"sync":{"prune":true}}}'`, appName)
+	_, err := RunSSHCommand(t, host, command)
+	if err != nil {
+		t.Logf("Sync 트리거 실패 (이미 진행 중일 수 있음): %v", err)
+	}
+	return nil // sync 트리거 실패는 무시 (이미 sync 중일 수 있음)
+}
+
+// logArgoCDAppDetails ArgoCD Application 상세 상태 로깅 (Issue #33)
+// 동기화 실패 시 디버깅을 위한 상세 정보 출력
+func logArgoCDAppDetails(t *testing.T, host ssh.Host, appName string) {
+	t.Logf("=== ArgoCD Application '%s' 상세 상태 ===", appName)
+
+	// 1. 전체 상태 요약
+	statusCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.sync.status},{.status.health.status},{.status.operationState.phase}' 2>/dev/null || echo 'Unknown'`, appName)
+	if output, err := RunSSHCommand(t, host, statusCmd); err == nil {
+		t.Logf("상태: %s", strings.TrimSpace(output))
+	}
+
+	// 2. 실패한 리소스 확인
+	resourceCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}/{.name}: {.health.status} - {.health.message}{"\n"}{end}' 2>/dev/null`, appName)
+	if output, err := RunSSHCommand(t, host, resourceCmd); err == nil && strings.TrimSpace(output) != "" {
+		t.Logf("Unhealthy Resources:\n%s", output)
+	}
+
+	// 3. 최근 sync 오류 메시지
+	syncMsgCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.operationState.message}' 2>/dev/null`, appName)
+	if output, err := RunSSHCommand(t, host, syncMsgCmd); err == nil && strings.TrimSpace(output) != "" {
+		t.Logf("Operation Message: %s", strings.TrimSpace(output))
+	}
+
+	// 4. conditions 확인 (추가 오류 정보)
+	condCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{range .status.conditions[*]}{.type}: {.message}{"\n"}{end}' 2>/dev/null`, appName)
+	if output, err := RunSSHCommand(t, host, condCmd); err == nil && strings.TrimSpace(output) != "" {
+		t.Logf("Conditions:\n%s", output)
+	}
+}
+
+// WaitForMonitoringStackReady Monitoring Stack 단계별 대기 (Issue #33 개선)
+// 1단계: ArgoCD Application Synced 상태 대기 (OutOfSync 시 sync 트리거)
+// 2단계: ArgoCD Application Healthy 상태 대기
+// 3단계: Monitoring Pod Ready 확인
 func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
-	// 1단계: ArgoCD titanium-prod Application Healthy 대기 (기존 7분 Sleep 대체)
-	t.Log("ArgoCD titanium-prod Application Healthy 대기 중 (최대 10분)...")
+	appName := "titanium-prod"
 
-	bootstrapRetries := 60 // 10초 간격 * 60 = 10분
-	bootstrapInterval := 10 * time.Second
+	// 1단계: Synced 상태 대기 (최대 7분, OutOfSync 시 sync 트리거)
+	t.Logf("1단계: ArgoCD %s Application Synced 상태 대기 (최대 7분)...", appName)
+	syncRetries := 42 // 10초 간격 * 42 = 7분
+	syncTriggered := false
 
-	_, err := retry.DoWithRetryE(t, "ArgoCD titanium-prod Healthy+Synced 대기", bootstrapRetries, bootstrapInterval, func() (string, error) {
-		// ArgoCD Application 상태 확인 (Healthy + Synced 동시 확인)
-		command := `sudo kubectl get application titanium-prod -n argocd -o jsonpath='{.status.health.status},{.status.sync.status}' 2>/dev/null || echo 'Unknown,Unknown'`
+	_, err := retry.DoWithRetryE(t, "ArgoCD Synced 대기", syncRetries, 10*time.Second, func() (string, error) {
+		// sync.status, health.status, operationState.phase 모두 조회
+		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.sync.status},{.status.health.status},{.status.operationState.phase}' 2>/dev/null || echo 'Unknown,Unknown,Unknown'`, appName)
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
-			return "", fmt.Errorf("ArgoCD Application 상태 확인 실패: %v", err)
+			return "", fmt.Errorf("상태 조회 실패: %v", err)
 		}
 
 		status := strings.TrimSpace(output)
-		if status != "Healthy,Synced" {
-			return "", fmt.Errorf("titanium-prod 상태: %s (Healthy,Synced 대기 중)", status)
+		parts := strings.Split(status, ",")
+		syncStatus := parts[0]
+		healthStatus := "Unknown"
+		operationPhase := "Unknown"
+		if len(parts) > 1 {
+			healthStatus = parts[1]
+		}
+		if len(parts) > 2 {
+			operationPhase = parts[2]
 		}
 
-		t.Log("ArgoCD titanium-prod Application이 Healthy,Synced 상태입니다")
-		return status, nil
+		t.Logf("현재 상태: Sync=%s, Health=%s, Operation=%s", syncStatus, healthStatus, operationPhase)
+
+		// OutOfSync 상태에서 sync 트리거 (1회만, Missing/Unknown 상태 제외)
+		if syncStatus == "OutOfSync" && healthStatus != "Missing" && !syncTriggered {
+			triggerArgoCDSync(t, host, appName)
+			syncTriggered = true
+			return "", fmt.Errorf("sync 트리거 후 대기 중")
+		}
+
+		// Synced 상태이거나, Operation이 Succeeded이면 sync 완료로 간주
+		// (ArgoCD가 sync 완료 후 상태 업데이트가 지연되는 경우 대응)
+		if syncStatus == "Synced" || operationPhase == "Succeeded" {
+			t.Logf("ArgoCD sync 완료 (Sync=%s, Operation=%s)", syncStatus, operationPhase)
+			return status, nil
+		}
+
+		return "", fmt.Errorf("%s 상태: %s (Synced 대기 중)", appName, status)
 	})
 
 	if err != nil {
-		return fmt.Errorf("ArgoCD titanium-prod Healthy 대기 실패: %v", err)
+		logArgoCDAppDetails(t, host, appName)
+		return fmt.Errorf("ArgoCD %s Synced 대기 실패: %v", appName, err)
 	}
 
-	// 2단계: monitoring namespace Pod Ready 확인 (jsonpath 사용)
-	t.Logf("Monitoring Pod Ready 대기 중 (최대 %v)...", MonitoringAppReadyWait)
+	// 2단계: Healthy 상태 대기 (최대 5분)
+	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 5분)...", appName)
+	healthRetries := 30 // 10초 간격 * 30 = 5분
+
+	_, err = retry.DoWithRetryE(t, "ArgoCD Healthy 대기", healthRetries, 10*time.Second, func() (string, error) {
+		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`, appName)
+		output, err := RunSSHCommand(t, host, command)
+		if err != nil {
+			return "", fmt.Errorf("상태 조회 실패: %v", err)
+		}
+
+		healthStatus := strings.TrimSpace(output)
+		t.Logf("Health 상태: %s", healthStatus)
+
+		if healthStatus == "Healthy" {
+			return healthStatus, nil
+		}
+
+		return "", fmt.Errorf("%s Health: %s (Healthy 대기 중)", appName, healthStatus)
+	})
+
+	if err != nil {
+		logArgoCDAppDetails(t, host, appName)
+		return fmt.Errorf("ArgoCD %s Healthy 대기 실패: %v", appName, err)
+	}
+
+	t.Logf("ArgoCD %s Application이 Healthy,Synced 상태입니다", appName)
+
+	// 3단계: monitoring namespace Pod Ready 확인 (기존 로직 유지)
+	t.Logf("3단계: Monitoring Pod Ready 대기 (최대 %v)...", MonitoringAppReadyWait)
 
 	maxRetries := int(MonitoringAppReadyWait / (10 * time.Second))
-	sleepBetweenRetries := 10 * time.Second
-
-	_, err = retry.DoWithRetryE(t, "Monitoring Pod Ready 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
-		// jsonpath로 Running Pod 개수 확인
+	_, err = retry.DoWithRetryE(t, "Monitoring Pod Ready", maxRetries, 10*time.Second, func() (string, error) {
 		command := `sudo kubectl get pods -n monitoring -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' 2>/dev/null | wc -w`
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
