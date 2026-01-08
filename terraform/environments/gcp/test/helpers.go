@@ -1168,7 +1168,8 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 	syncTriggered := false
 
 	_, err := retry.DoWithRetryE(t, "ArgoCD Synced 대기", syncRetries, 10*time.Second, func() (string, error) {
-		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.sync.status},{.status.health.status}' 2>/dev/null || echo 'Unknown,Unknown'`, appName)
+		// sync.status, health.status, operationState.phase 모두 조회
+		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.sync.status},{.status.health.status},{.status.operationState.phase}' 2>/dev/null || echo 'Unknown,Unknown,Unknown'`, appName)
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
 			return "", fmt.Errorf("상태 조회 실패: %v", err)
@@ -1178,20 +1179,27 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 		parts := strings.Split(status, ",")
 		syncStatus := parts[0]
 		healthStatus := "Unknown"
+		operationPhase := "Unknown"
 		if len(parts) > 1 {
 			healthStatus = parts[1]
 		}
+		if len(parts) > 2 {
+			operationPhase = parts[2]
+		}
 
-		t.Logf("현재 상태: Sync=%s, Health=%s", syncStatus, healthStatus)
+		t.Logf("현재 상태: Sync=%s, Health=%s, Operation=%s", syncStatus, healthStatus, operationPhase)
 
-		// OutOfSync 상태에서 sync 트리거 (1회만)
-		if syncStatus == "OutOfSync" && !syncTriggered {
+		// OutOfSync 상태에서 sync 트리거 (1회만, Missing/Unknown 상태 제외)
+		if syncStatus == "OutOfSync" && healthStatus != "Missing" && !syncTriggered {
 			triggerArgoCDSync(t, host, appName)
 			syncTriggered = true
 			return "", fmt.Errorf("sync 트리거 후 대기 중")
 		}
 
-		if syncStatus == "Synced" {
+		// Synced 상태이거나, Operation이 Succeeded이면 sync 완료로 간주
+		// (ArgoCD가 sync 완료 후 상태 업데이트가 지연되는 경우 대응)
+		if syncStatus == "Synced" || operationPhase == "Succeeded" {
+			t.Logf("ArgoCD sync 완료 (Sync=%s, Operation=%s)", syncStatus, operationPhase)
 			return status, nil
 		}
 
