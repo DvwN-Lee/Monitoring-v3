@@ -1127,6 +1127,53 @@ func triggerArgoCDSync(t *testing.T, host ssh.Host, appName string) error {
 
 // logArgoCDAppDetails ArgoCD Application 상세 상태 로깅 (Issue #33)
 // 동기화 실패 시 디버깅을 위한 상세 정보 출력
+// logDegradedDebugInfo Degraded 상태 전환 시 상세 디버깅 정보 출력
+func logDegradedDebugInfo(t *testing.T, host ssh.Host, appName string) {
+	t.Log("--- [1/5] ArgoCD Unhealthy Resources ---")
+	resourceCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}/{.name}: {.health.status} - {.health.message}{"\n"}{end}' 2>/dev/null`, appName)
+	if output, err := RunSSHCommand(t, host, resourceCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Unhealthy Resources:\n%s", trimmed)
+		} else {
+			t.Log("(Unhealthy resource 없음 - 상태 전환 중)")
+		}
+	}
+
+	t.Log("--- [2/5] Default Namespace Pod Status ---")
+	podCmd := `sudo kubectl get pods -n default -o wide 2>/dev/null | head -20`
+	if output, err := RunSSHCommand(t, host, podCmd); err == nil {
+		t.Logf("Pods:\n%s", strings.TrimSpace(output))
+	}
+
+	t.Log("--- [3/5] Not Ready Pods Detail ---")
+	notReadyCmd := `sudo kubectl get pods -n default -o jsonpath='{range .items[?(@.status.phase!="Running")]}{.metadata.name}: {.status.phase} - {.status.conditions[?(@.type=="Ready")].reason}{"\n"}{end}' 2>/dev/null`
+	if output, err := RunSSHCommand(t, host, notReadyCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Not Ready Pods:\n%s", trimmed)
+		} else {
+			t.Log("(모든 Pod가 Running 상태)")
+		}
+	}
+
+	t.Log("--- [4/5] Recent Events (Warning) ---")
+	eventsCmd := `sudo kubectl get events -n default --field-selector type=Warning --sort-by='.lastTimestamp' 2>/dev/null | tail -10`
+	if output, err := RunSSHCommand(t, host, eventsCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Warning Events:\n%s", trimmed)
+		} else {
+			t.Log("(Warning event 없음)")
+		}
+	}
+
+	t.Log("--- [5/5] Node Resource Usage ---")
+	nodeCmd := `sudo kubectl top nodes 2>/dev/null || echo 'metrics-server not ready'`
+	if output, err := RunSSHCommand(t, host, nodeCmd); err == nil {
+		t.Logf("Node Resources:\n%s", strings.TrimSpace(output))
+	}
+
+	t.Log("=== Degraded 디버깅 정보 수집 완료 ===")
+}
+
 func logArgoCDAppDetails(t *testing.T, host ssh.Host, appName string) {
 	t.Logf("=== ArgoCD Application '%s' 상세 상태 ===", appName)
 
@@ -1214,6 +1261,8 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 	// 2단계: Healthy 상태 대기 (최대 10분, Issue #37 리소스 증설에 따른 배포 시간 증가 대응)
 	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 10분)...", appName)
 	healthRetries := 60 // 10초 간격 * 60 = 10분
+	prevHealthStatus := ""
+	degradedLogged := false
 
 	_, err = retry.DoWithRetryE(t, "ArgoCD Healthy 대기", healthRetries, 10*time.Second, func() (string, error) {
 		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`, appName)
@@ -1224,6 +1273,14 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 
 		healthStatus := strings.TrimSpace(output)
 		t.Logf("Health 상태: %s", healthStatus)
+
+		// Degraded 상태 전환 감지 시 상세 디버깅 정보 출력 (최초 1회만)
+		if healthStatus == "Degraded" && prevHealthStatus != "Degraded" && !degradedLogged {
+			t.Log("=== Degraded 상태 감지: 상세 디버깅 정보 수집 ===")
+			logDegradedDebugInfo(t, host, appName)
+			degradedLogged = true
+		}
+		prevHealthStatus = healthStatus
 
 		if healthStatus == "Healthy" {
 			return healthStatus, nil
