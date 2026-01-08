@@ -11,7 +11,7 @@ resource "google_compute_health_check" "k3s_autohealing" {
   unhealthy_threshold = 3
 
   tcp_health_check {
-    port = "10250"  # Kubelet port
+    port = "10250" # Kubelet port
   }
 }
 
@@ -67,7 +67,7 @@ resource "google_compute_instance_template" "k3s_worker" {
   # Spot (Preemptible) VM configuration
   scheduling {
     preemptible                 = var.use_spot_for_workers
-    automatic_restart           = false  # Spot VM은 automatic_restart 불가
+    automatic_restart           = false # Spot VM은 automatic_restart 불가
     on_host_maintenance         = "TERMINATE"
     provisioning_model          = var.use_spot_for_workers ? "SPOT" : "STANDARD"
     instance_termination_action = var.use_spot_for_workers ? "STOP" : null
@@ -103,7 +103,7 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   # Auto-healing Policy
   auto_healing_policies {
     health_check      = google_compute_health_check.k3s_autohealing.id
-    initial_delay_sec = 300  # k3s 설치 및 Join 대기 시간 (5분)
+    initial_delay_sec = 300 # k3s 설치 및 Join 대기 시간 (5분)
   }
 
   # Update Policy - Rolling update
