@@ -44,11 +44,11 @@ const (
 	K3sBootstrapTimeout   = 15 * time.Minute
 	DefaultTimeout        = 30 * time.Second
 
-	// Monitoring Stack 재시도 설정 (Issue #27, #29)
-	MonitoringStackInitialWait    = 7 * time.Minute  // Bootstrap 초기 대기
-	MonitoringAppReadyWait        = 5 * time.Minute  // Application Pod Ready 대기 (3분 -> 5분, Loki/Prometheus 초기화 고려)
-	MonitoringHealthCheckRetries  = 6                // Health Check 재시도 횟수 (3 -> 6)
-	MonitoringHealthCheckInterval = 20 * time.Second // Health Check 재시도 간격
+	// Monitoring Stack 재시도 설정 (Issue #27, #29, #35)
+	MonitoringStackInitialWait    = 7 * time.Minute   // Bootstrap 초기 대기
+	MonitoringAppReadyWait        = 10 * time.Minute  // Application Pod Ready 대기 (5분 -> 10분, 리소스 제약 환경 대응 #35)
+	MonitoringHealthCheckRetries  = 12                // Health Check 재시도 횟수 (6 -> 12, 리소스 제약 환경 대응 #35)
+	MonitoringHealthCheckInterval = 20 * time.Second  // Health Check 재시도 간격
 
 	// Application 관련 상수 (Issue #27 - 2차 리뷰)
 	NamespaceProd = "titanium-prod"

@@ -144,19 +144,19 @@ variable "helm_versions" {
 variable "nodeports" {
   description = "NodePort assignments for services"
   type = object({
-    argocd          = number
-    grafana         = number
-    prometheus      = number
-    kiali           = number
-    istio_http      = number
-    istio_https     = number
+    argocd      = number
+    grafana     = number
+    prometheus  = number
+    kiali       = number
+    istio_http  = number
+    istio_https = number
   })
   default = {
-    argocd          = 30080
-    grafana         = 31300
-    prometheus      = 31090
-    kiali           = 31200
-    istio_http      = 31080
-    istio_https     = 31443
+    argocd      = 30080
+    grafana     = 31300
+    prometheus  = 31090
+    kiali       = 31200
+    istio_http  = 31080
+    istio_https = 31443
   }
 }
