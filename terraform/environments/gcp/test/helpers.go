@@ -27,8 +27,8 @@ const (
 	DefaultZone             = "asia-northeast3-a"
 	DefaultClusterName      = "terratest-k3s"
 	DefaultMasterMachineType = "e2-medium"
-	DefaultWorkerMachineType = "e2-standard-2"
-	DefaultWorkerCount      = 1
+	DefaultWorkerMachineType = "e2-standard-4"
+	DefaultWorkerCount      = 2
 	DefaultSubnetCIDR       = "10.128.0.0/20"
 	DefaultMasterDiskSize   = 30
 	DefaultWorkerDiskSize   = 40
