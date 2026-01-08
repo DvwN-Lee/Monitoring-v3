@@ -48,7 +48,7 @@ locals {
   }
 
   # GCP System IP ranges (documented by Google)
-  gcp_iap_cidr          = "35.235.240.0/20"
+  gcp_iap_cidr           = "35.235.240.0/20"
   gcp_health_check_cidrs = ["35.191.0.0/16", "130.211.0.0/22"]
 }
 
