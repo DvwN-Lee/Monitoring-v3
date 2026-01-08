@@ -1211,9 +1211,9 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 		return fmt.Errorf("ArgoCD %s Synced 대기 실패: %v", appName, err)
 	}
 
-	// 2단계: Healthy 상태 대기 (최대 5분)
-	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 5분)...", appName)
-	healthRetries := 30 // 10초 간격 * 30 = 5분
+	// 2단계: Healthy 상태 대기 (최대 10분, Issue #37 리소스 증설에 따른 배포 시간 증가 대응)
+	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 10분)...", appName)
+	healthRetries := 60 // 10초 간격 * 60 = 10분
 
 	_, err = retry.DoWithRetryE(t, "ArgoCD Healthy 대기", healthRetries, 10*time.Second, func() (string, error) {
 		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`, appName)
