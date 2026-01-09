@@ -92,10 +92,9 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   zone               = var.zone
   target_size        = var.worker_count
 
-  # Destroy 시 인스턴스 삭제 완료 대기
-  wait_for_instances = true
-  # Issue #37: wait_for_instances_status 제거 - Race Condition 방지
-  # Gemini 권장: gcloud wait-until --stable로 대체
+  # Issue #37: wait_for_instances 비활성화 - gcloud provisioner로 대기 책임 위임
+  # Terraform은 MIG 리소스 생성만 담당, 안정화 대기는 provisioner에서 처리
+  wait_for_instances = false
 
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
