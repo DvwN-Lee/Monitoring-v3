@@ -65,10 +65,11 @@ resource "google_compute_instance_template" "k3s_worker" {
   }
 
   # Spot (Preemptible) VM configuration
+  # Issue #37: e2 인스턴스는 preemptible이 아닌 경우 on_host_maintenance=TERMINATE 미지원
   scheduling {
     preemptible                 = var.use_spot_for_workers
-    automatic_restart           = false # Spot VM은 automatic_restart 불가
-    on_host_maintenance         = "TERMINATE"
+    automatic_restart           = var.use_spot_for_workers ? false : true
+    on_host_maintenance         = var.use_spot_for_workers ? "TERMINATE" : "MIGRATE"
     provisioning_model          = var.use_spot_for_workers ? "SPOT" : "STANDARD"
     instance_termination_action = var.use_spot_for_workers ? "STOP" : null
   }
@@ -92,18 +93,23 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   zone               = var.zone
   target_size        = var.worker_count
 
-  # Destroy 시 인스턴스 삭제 완료 대기
-  wait_for_instances        = true
-  wait_for_instances_status = "STABLE"
+  # Issue #37: wait_for_instances=false로 설정
+  # MIG 생성 후 인스턴스 RUNNING 대기는 테스트 코드에서 수행
+  # (15분 Terraform 타임아웃 초과 방지)
+  wait_for_instances = false
 
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
   }
 
-  # Auto-healing Policy
-  auto_healing_policies {
-    health_check      = google_compute_health_check.k3s_autohealing.id
-    initial_delay_sec = 300 # k3s 설치 및 Join 대기 시간 (5분)
+  # Auto-healing Policy (Issue #37: 테스트 환경에서는 비활성화 가능)
+  # Auto-healing이 활성화된 경우에만 정책 적용
+  dynamic "auto_healing_policies" {
+    for_each = var.enable_auto_healing ? [1] : []
+    content {
+      health_check      = google_compute_health_check.k3s_autohealing.id
+      initial_delay_sec = 300 # k3s 설치 및 Join 대기 시간 (5분)
+    }
   }
 
   # Update Policy - Rolling update

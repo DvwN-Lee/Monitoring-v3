@@ -53,6 +53,12 @@ variable "use_spot_for_workers" {
   default     = true
 }
 
+variable "enable_auto_healing" {
+  description = "Enable auto-healing for worker MIG (disable for test environments)"
+  type        = bool
+  default     = true
+}
+
 variable "master_disk_size" {
   description = "Disk size for master node in GB"
   type        = number
