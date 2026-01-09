@@ -157,6 +157,7 @@ func GetTestTerraformVars() map[string]interface{} {
 		"master_disk_size":       DefaultMasterDiskSize,
 		"worker_disk_size":       DefaultWorkerDiskSize,
 		"use_spot_for_workers":   false, // Issue #37: Spot Instance InvalidDiskCapacity 오류 대응
+		"enable_auto_healing":    false, // Issue #37: 테스트 환경 auto-healing 비활성화 (무한 재생성 방지)
 		"postgres_password":      TestPostgresPassword,
 		"grafana_admin_password": TestGrafanaPassword,
 		"ssh_public_key_path":    filepath.Join(homeDir, ".ssh", "titanium-key.pub"),

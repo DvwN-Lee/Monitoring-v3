@@ -100,10 +100,14 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
     instance_template = google_compute_instance_template.k3s_worker.id
   }
 
-  # Auto-healing Policy
-  auto_healing_policies {
-    health_check      = google_compute_health_check.k3s_autohealing.id
-    initial_delay_sec = 300 # k3s 설치 및 Join 대기 시간 (5분)
+  # Auto-healing Policy (Issue #37: 테스트 환경에서는 비활성화 가능)
+  # Auto-healing이 활성화된 경우에만 정책 적용
+  dynamic "auto_healing_policies" {
+    for_each = var.enable_auto_healing ? [1] : []
+    content {
+      health_check      = google_compute_health_check.k3s_autohealing.id
+      initial_delay_sec = 300 # k3s 설치 및 Join 대기 시간 (5분)
+    }
   }
 
   # Update Policy - Rolling update
