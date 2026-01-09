@@ -93,8 +93,9 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   target_size        = var.worker_count
 
   # Destroy 시 인스턴스 삭제 완료 대기
-  wait_for_instances        = true
-  wait_for_instances_status = "STABLE"
+  wait_for_instances = true
+  # Issue #37: wait_for_instances_status 제거 - Race Condition 방지
+  # Gemini 권장: gcloud wait-until --stable로 대체
 
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
@@ -126,4 +127,12 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
     google_compute_instance.k3s_master,
     google_compute_health_check.k3s_autohealing
   ]
+
+  # Issue #37: gcloud CLI로 인스턴스 안정화 대기 (Gemini 권장)
+  # Terraform 리소스 생성 후 MIG가 STABLE 상태가 될 때까지 대기
+  provisioner "local-exec" {
+    command     = "gcloud compute instance-groups managed wait-until --stable ${self.name} --zone ${self.zone} --timeout 1200"
+    interpreter = ["/bin/bash", "-c"]
+    when        = create
+  }
 }
