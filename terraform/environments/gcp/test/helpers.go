@@ -27,11 +27,11 @@ const (
 	DefaultZone             = "asia-northeast3-a"
 	DefaultClusterName      = "terratest-k3s"
 	DefaultMasterMachineType = "e2-medium"
-	DefaultWorkerMachineType = "e2-standard-2"
-	DefaultWorkerCount      = 1
+	DefaultWorkerMachineType = "e2-standard-4"
+	DefaultWorkerCount      = 2
 	DefaultSubnetCIDR       = "10.128.0.0/20"
 	DefaultMasterDiskSize   = 30
-	DefaultWorkerDiskSize   = 40
+	DefaultWorkerDiskSize   = 60 // Issue #37: InvalidDiskCapacity 오류 대응
 	TestPostgresPassword    = "TerratestPassword123!"
 	TestGrafanaPassword     = "TerratestGrafana123!"
 	SSHUsername             = "ubuntu"
@@ -156,7 +156,8 @@ func GetTestTerraformVars() map[string]interface{} {
 		"subnet_cidr":            DefaultSubnetCIDR,
 		"master_disk_size":       DefaultMasterDiskSize,
 		"worker_disk_size":       DefaultWorkerDiskSize,
-		"use_spot_for_workers":   true,
+		"use_spot_for_workers":   false, // Issue #37: Spot Instance InvalidDiskCapacity 오류 대응
+		"enable_auto_healing":    false, // Issue #37: 테스트 환경 auto-healing 비활성화 (무한 재생성 방지)
 		"postgres_password":      TestPostgresPassword,
 		"grafana_admin_password": TestGrafanaPassword,
 		"ssh_public_key_path":    filepath.Join(homeDir, ".ssh", "titanium-key.pub"),
@@ -478,8 +479,12 @@ func GetWorkerInstanceNames(t *testing.T, clusterName, projectID, zone string) (
 		return nil, fmt.Errorf("Worker 인스턴스 목록 조회 실패: %v", err)
 	}
 
+	// gcloud 출력에서 JSON 부분만 추출 (WARNING 메시지 제거)
+	// Issue #37: gcloud가 WARNING 메시지를 stdout으로 출력하는 경우 처리
+	jsonOutput := extractJSON(output)
+
 	var instances []WorkerInstanceInfo
-	if err := json.Unmarshal([]byte(output), &instances); err != nil {
+	if err := json.Unmarshal([]byte(jsonOutput), &instances); err != nil {
 		return nil, fmt.Errorf("Worker 인스턴스 JSON 파싱 실패: %v", err)
 	}
 
@@ -493,21 +498,62 @@ func GetWorkerInstanceNames(t *testing.T, clusterName, projectID, zone string) (
 	return names, nil
 }
 
+// extractJSON gcloud 출력에서 JSON 부분만 추출
+// WARNING 등 비-JSON 메시지가 포함된 경우 JSON 배열/객체 부분만 반환
+func extractJSON(output string) string {
+	lines := strings.Split(output, "\n")
+
+	// JSON 시작점 찾기 ([ 또는 {로 시작하는 첫 줄)
+	startIdx := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "{") {
+			startIdx = i
+			break
+		}
+	}
+
+	if startIdx == -1 {
+		// JSON을 찾지 못한 경우 빈 배열 반환
+		return "[]"
+	}
+
+	// JSON 끝점 찾기 (] 또는 }로 끝나는 마지막 줄)
+	endIdx := startIdx
+	for i := len(lines) - 1; i >= startIdx; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasSuffix(trimmed, "]") || strings.HasSuffix(trimmed, "}") {
+			endIdx = i
+			break
+		}
+	}
+
+	return strings.Join(lines[startIdx:endIdx+1], "\n")
+}
+
 // GetWorkerInstanceNamesWithRetry 재시도 로직 포함 Worker 인스턴스 조회
 // MIG 인스턴스 생성 완료까지 대기
+// Issue #37: wait_for_instances=false 설정 후 GCP MIG 인스턴스 프로비저닝 대기
+// - MIG 생성 후 인스턴스 프로비저닝까지 최대 15분 소요 가능
 func GetWorkerInstanceNamesWithRetry(t *testing.T, clusterName, projectID, zone string, expectedCount int) ([]string, error) {
-	maxRetries := 30
+	maxRetries := 90 // 15분 (90 * 10초)
 	sleepBetweenRetries := 10 * time.Second
+	retryCount := 0
 
 	var workerNames []string
 
 	_, err := retry.DoWithRetryE(t, "Worker 인스턴스 RUNNING 대기", maxRetries, sleepBetweenRetries, func() (string, error) {
+		retryCount++
 		names, err := GetWorkerInstanceNames(t, clusterName, projectID, zone)
 		if err != nil {
 			return "", err
 		}
 
 		if len(names) < expectedCount {
+			// 5회마다 MIG 상태 로깅 (디버깅용)
+			if retryCount%5 == 0 {
+				logMIGStatus(t, clusterName, projectID, zone)
+			}
 			return "", fmt.Errorf("RUNNING 상태 Worker 인스턴스 부족: %d/%d", len(names), expectedCount)
 		}
 
@@ -516,6 +562,22 @@ func GetWorkerInstanceNamesWithRetry(t *testing.T, clusterName, projectID, zone 
 	})
 
 	return workerNames, err
+}
+
+// logMIGStatus MIG 상태 로깅 (디버깅용)
+func logMIGStatus(t *testing.T, clusterName, projectID, zone string) {
+	migName := fmt.Sprintf("%s-worker-mig", clusterName)
+	output, err := RunShellCommand(t, "gcloud",
+		"compute", "instance-groups", "managed", "describe", migName,
+		"--zone", zone,
+		"--project", projectID,
+		"--format", "yaml(targetSize,status.isStable,currentActions)",
+	)
+	if err != nil {
+		t.Logf("MIG 상태 조회 실패: %v", err)
+		return
+	}
+	t.Logf("MIG 상태:\n%s", output)
 }
 
 // VerifyIAMLoggingPermission Logging 권한 검증
@@ -1127,6 +1189,53 @@ func triggerArgoCDSync(t *testing.T, host ssh.Host, appName string) error {
 
 // logArgoCDAppDetails ArgoCD Application 상세 상태 로깅 (Issue #33)
 // 동기화 실패 시 디버깅을 위한 상세 정보 출력
+// logDegradedDebugInfo Degraded 상태 전환 시 상세 디버깅 정보 출력
+func logDegradedDebugInfo(t *testing.T, host ssh.Host, appName string) {
+	t.Log("--- [1/5] ArgoCD Unhealthy Resources ---")
+	resourceCmd := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}/{.name}: {.health.status} - {.health.message}{"\n"}{end}' 2>/dev/null`, appName)
+	if output, err := RunSSHCommand(t, host, resourceCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Unhealthy Resources:\n%s", trimmed)
+		} else {
+			t.Log("(Unhealthy resource 없음 - 상태 전환 중)")
+		}
+	}
+
+	t.Log("--- [2/5] Default Namespace Pod Status ---")
+	podCmd := `sudo kubectl get pods -n default -o wide 2>/dev/null | head -20`
+	if output, err := RunSSHCommand(t, host, podCmd); err == nil {
+		t.Logf("Pods:\n%s", strings.TrimSpace(output))
+	}
+
+	t.Log("--- [3/5] Not Ready Pods Detail ---")
+	notReadyCmd := `sudo kubectl get pods -n default -o jsonpath='{range .items[?(@.status.phase!="Running")]}{.metadata.name}: {.status.phase} - {.status.conditions[?(@.type=="Ready")].reason}{"\n"}{end}' 2>/dev/null`
+	if output, err := RunSSHCommand(t, host, notReadyCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Not Ready Pods:\n%s", trimmed)
+		} else {
+			t.Log("(모든 Pod가 Running 상태)")
+		}
+	}
+
+	t.Log("--- [4/5] Recent Events (Warning) ---")
+	eventsCmd := `sudo kubectl get events -n default --field-selector type=Warning --sort-by='.lastTimestamp' 2>/dev/null | tail -10`
+	if output, err := RunSSHCommand(t, host, eventsCmd); err == nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			t.Logf("Warning Events:\n%s", trimmed)
+		} else {
+			t.Log("(Warning event 없음)")
+		}
+	}
+
+	t.Log("--- [5/5] Node Resource Usage ---")
+	nodeCmd := `sudo kubectl top nodes 2>/dev/null || echo 'metrics-server not ready'`
+	if output, err := RunSSHCommand(t, host, nodeCmd); err == nil {
+		t.Logf("Node Resources:\n%s", strings.TrimSpace(output))
+	}
+
+	t.Log("=== Degraded 디버깅 정보 수집 완료 ===")
+}
+
 func logArgoCDAppDetails(t *testing.T, host ssh.Host, appName string) {
 	t.Logf("=== ArgoCD Application '%s' 상세 상태 ===", appName)
 
@@ -1211,9 +1320,11 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 		return fmt.Errorf("ArgoCD %s Synced 대기 실패: %v", appName, err)
 	}
 
-	// 2단계: Healthy 상태 대기 (최대 5분)
-	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 5분)...", appName)
-	healthRetries := 30 // 10초 간격 * 30 = 5분
+	// 2단계: Healthy 상태 대기 (최대 10분, Issue #37 리소스 증설에 따른 배포 시간 증가 대응)
+	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 15분)...", appName)
+	healthRetries := 90 // 10초 간격 * 90 = 15분 (Issue #37: 배포 안정화 시간 확보)
+	prevHealthStatus := ""
+	degradedLogged := false
 
 	_, err = retry.DoWithRetryE(t, "ArgoCD Healthy 대기", healthRetries, 10*time.Second, func() (string, error) {
 		command := fmt.Sprintf(`sudo kubectl get application %s -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo 'Unknown'`, appName)
@@ -1224,6 +1335,14 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 
 		healthStatus := strings.TrimSpace(output)
 		t.Logf("Health 상태: %s", healthStatus)
+
+		// Degraded 상태 전환 감지 시 상세 디버깅 정보 출력 (최초 1회만)
+		if healthStatus == "Degraded" && prevHealthStatus != "Degraded" && !degradedLogged {
+			t.Log("=== Degraded 상태 감지: 상세 디버깅 정보 수집 ===")
+			logDegradedDebugInfo(t, host, appName)
+			degradedLogged = true
+		}
+		prevHealthStatus = healthStatus
 
 		if healthStatus == "Healthy" {
 			return healthStatus, nil
