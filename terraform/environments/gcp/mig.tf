@@ -92,9 +92,9 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   zone               = var.zone
   target_size        = var.worker_count
 
-  # Issue #37: wait_for_instances 비활성화 - gcloud provisioner로 대기 책임 위임
-  # Terraform은 MIG 리소스 생성만 담당, 안정화 대기는 provisioner에서 처리
-  wait_for_instances = false
+  # Issue #37: auto-healing 비활성화 시 wait_for_instances로 인스턴스 생성 대기
+  # Auto-healing이 비활성화된 경우 recreation loop 없이 안전하게 대기 가능
+  wait_for_instances = true
 
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
@@ -130,12 +130,4 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
     google_compute_instance.k3s_master,
     google_compute_health_check.k3s_autohealing
   ]
-
-  # Issue #37: gcloud CLI로 인스턴스 안정화 대기 (Gemini 권장)
-  # Terraform 리소스 생성 후 MIG가 STABLE 상태가 될 때까지 대기
-  provisioner "local-exec" {
-    command     = "gcloud compute instance-groups managed wait-until --stable ${self.name} --zone ${self.zone} --timeout 1200"
-    interpreter = ["/bin/bash", "-c"]
-    when        = create
-  }
 }
