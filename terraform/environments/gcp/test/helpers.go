@@ -31,7 +31,7 @@ const (
 	DefaultWorkerCount      = 2
 	DefaultSubnetCIDR       = "10.128.0.0/20"
 	DefaultMasterDiskSize   = 30
-	DefaultWorkerDiskSize   = 40
+	DefaultWorkerDiskSize   = 60 // Issue #37: InvalidDiskCapacity 오류 대응
 	TestPostgresPassword    = "TerratestPassword123!"
 	TestGrafanaPassword     = "TerratestGrafana123!"
 	SSHUsername             = "ubuntu"
