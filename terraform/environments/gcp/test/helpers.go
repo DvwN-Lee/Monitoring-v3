@@ -156,7 +156,7 @@ func GetTestTerraformVars() map[string]interface{} {
 		"subnet_cidr":            DefaultSubnetCIDR,
 		"master_disk_size":       DefaultMasterDiskSize,
 		"worker_disk_size":       DefaultWorkerDiskSize,
-		"use_spot_for_workers":   true,
+		"use_spot_for_workers":   false, // Issue #37: Spot Instance InvalidDiskCapacity 오류 대응
 		"postgres_password":      TestPostgresPassword,
 		"grafana_admin_password": TestGrafanaPassword,
 		"ssh_public_key_path":    filepath.Join(homeDir, ".ssh", "titanium-key.pub"),
@@ -1259,8 +1259,8 @@ func WaitForMonitoringStackReady(t *testing.T, host ssh.Host) error {
 	}
 
 	// 2단계: Healthy 상태 대기 (최대 10분, Issue #37 리소스 증설에 따른 배포 시간 증가 대응)
-	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 10분)...", appName)
-	healthRetries := 60 // 10초 간격 * 60 = 10분
+	t.Logf("2단계: ArgoCD %s Application Healthy 상태 대기 (최대 15분)...", appName)
+	healthRetries := 90 // 10초 간격 * 90 = 15분 (Issue #37: 배포 안정화 시간 확보)
 	prevHealthStatus := ""
 	degradedLogged := false
 
