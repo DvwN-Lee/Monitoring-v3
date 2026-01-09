@@ -92,9 +92,10 @@ resource "google_compute_instance_group_manager" "k3s_workers" {
   zone               = var.zone
   target_size        = var.worker_count
 
-  # Issue #37: auto-healing 비활성화 시 wait_for_instances로 인스턴스 생성 대기
-  # Auto-healing이 비활성화된 경우 recreation loop 없이 안전하게 대기 가능
-  wait_for_instances = true
+  # Issue #37: wait_for_instances=false로 설정
+  # MIG 생성 후 인스턴스 RUNNING 대기는 테스트 코드에서 수행
+  # (15분 Terraform 타임아웃 초과 방지)
+  wait_for_instances = false
 
   version {
     instance_template = google_compute_instance_template.k3s_worker.id
