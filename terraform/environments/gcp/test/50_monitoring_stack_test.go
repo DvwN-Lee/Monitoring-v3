@@ -21,6 +21,13 @@ func TestMonitoringStackValidation(t *testing.T) {
 	defer terraform.Destroy(t, terraformOptions)
 	terraform.InitAndApply(t, terraformOptions)
 
+	// Issue #37: wait_for_instances=false로 변경됨에 따라
+	// Worker 인스턴스 RUNNING 상태 대기 (MIG 15분 타임아웃 방지)
+	t.Log("Worker 인스턴스 RUNNING 상태 대기 중...")
+	workerNames, err := GetWorkerInstanceNamesWithRetry(t, DefaultClusterName, DefaultProjectID, DefaultZone, DefaultWorkerCount)
+	require.NoError(t, err, "Worker 인스턴스 RUNNING 대기 실패")
+	t.Logf("Worker 인스턴스 RUNNING 확인: %v", workerNames)
+
 	masterPublicIP := terraform.Output(t, terraformOptions, "master_external_ip")
 	waitForK3sCluster(t, masterPublicIP)
 
@@ -30,7 +37,7 @@ func TestMonitoringStackValidation(t *testing.T) {
 	// Monitoring Stack이 완전히 준비될 때까지 단계별 대기 (Issue #27)
 	// 1단계: ArgoCD Application Healthy 대기 (최대 10분)
 	// 2단계: Monitoring Pod Ready 확인 (최대 3분)
-	err := WaitForMonitoringStackReady(t, host)
+	err = WaitForMonitoringStackReady(t, host)
 	require.NoError(t, err, "Monitoring Stack 준비 실패")
 
 	// Monitoring Stack Subtests
