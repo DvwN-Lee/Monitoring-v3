@@ -117,22 +117,22 @@ log "Generating JWT RS256 key pair..."
 JWT_TEMP_DIR=$(mktemp -d)
 openssl genrsa -out "$JWT_TEMP_DIR/jwt-private.pem" 2048 2>/dev/null
 openssl rsa -in "$JWT_TEMP_DIR/jwt-private.pem" -pubout -out "$JWT_TEMP_DIR/jwt-public.pem" 2>/dev/null
-JWT_PRIVATE_KEY=$(base64 -w0 "$JWT_TEMP_DIR/jwt-private.pem")
-JWT_PUBLIC_KEY=$(base64 -w0 "$JWT_TEMP_DIR/jwt-public.pem")
-rm -rf "$JWT_TEMP_DIR"
 
 # Create app-secrets with JWT RS256 keys
+# Issue #39: --from-file 사용으로 이중 base64 인코딩 문제 해결
+# kubectl --from-file은 파일 내용을 자동으로 base64 인코딩하여 Secret에 저장
 log "Creating app-secrets with JWT RS256 keys..."
 kubectl create secret generic prod-app-secrets \
   --from-literal=POSTGRES_USER=postgres \
   --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
-  --from-literal=JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
-  --from-literal=JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
+  --from-file=JWT_PRIVATE_KEY="$JWT_TEMP_DIR/jwt-private.pem" \
+  --from-file=JWT_PUBLIC_KEY="$JWT_TEMP_DIR/jwt-public.pem" \
   --from-literal=INTERNAL_API_SECRET="$(openssl rand -hex 32)" \
   --from-literal=REDIS_PASSWORD="$(openssl rand -hex 16)" \
   --namespace=titanium-prod \
   --dry-run=client -o yaml | kubectl apply -f -
+rm -rf "$JWT_TEMP_DIR"
 
 # Generate TLS Certificate for Istio Gateway
 log "Generating TLS certificate for Istio Gateway..."
@@ -173,6 +173,19 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: titanium-prod
+  # Issue #39: Bootstrap script에서 생성한 Secret 값 보존
+  # ArgoCD selfHeal이 Git의 placeholder 값으로 덮어쓰지 않도록 설정
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: prod-app-secrets
+      jsonPointers:
+        - /data/JWT_PRIVATE_KEY
+        - /data/JWT_PUBLIC_KEY
+        - /data/JWT_SECRET_KEY
+        - /data/INTERNAL_API_SECRET
+        - /data/POSTGRES_PASSWORD
+        - /data/REDIS_PASSWORD
   syncPolicy:
     automated:
       prune: true
@@ -183,6 +196,7 @@ spec:
       - PruneLast=true
       - Validate=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
