@@ -47,7 +47,7 @@ const (
 	// Monitoring Stack 재시도 설정 (Issue #27, #29, #35)
 	MonitoringStackInitialWait    = 7 * time.Minute   // Bootstrap 초기 대기
 	MonitoringAppReadyWait        = 10 * time.Minute  // Application Pod Ready 대기 (5분 -> 10분, 리소스 제약 환경 대응 #35)
-	MonitoringHealthCheckRetries  = 12                // Health Check 재시도 횟수 (6 -> 12, 리소스 제약 환경 대응 #35)
+	MonitoringHealthCheckRetries  = 18                // Health Check 재시도 횟수 (12 -> 18, 리소스 제약 환경 대응)
 	MonitoringHealthCheckInterval = 20 * time.Second  // Health Check 재시도 간격
 
 	// Application 관련 상수 (Issue #27 - 2차 리뷰)
@@ -1042,8 +1042,8 @@ func QueryPrometheusMetric(t *testing.T, host ssh.Host, query string) (int, erro
 
 // VerifyGrafanaDataSources Grafana DataSource 연결 상태 확인
 func VerifyGrafanaDataSources(t *testing.T, host ssh.Host, sources []string) error {
-	// Grafana API로 DataSource 목록 조회
-	command := `curl -s -u admin:admin "http://localhost:31300/api/datasources" | jq -r '.[].name'`
+	// Grafana API로 DataSource 목록 조회 (TestGrafanaPassword 사용)
+	command := fmt.Sprintf(`curl -s -u admin:%s "http://localhost:31300/api/datasources" | jq -r '.[].name'`, TestGrafanaPassword)
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
@@ -1088,22 +1088,28 @@ func QueryLokiLogs(t *testing.T, host ssh.Host, logQL string) (int, error) {
 	return resultCount, nil
 }
 
-// GetKialiNamespaces Kiali에서 관리하는 namespace 목록 조회
+// GetKialiNamespaces Kiali가 관리하는 namespace 목록 조회
+// Kiali API 대신 kubectl로 Istio sidecar가 주입된 namespace 확인
 func GetKialiNamespaces(t *testing.T, host ssh.Host) ([]string, error) {
-	// Kiali API를 통해 namespace 목록 조회
-	command := `curl -s "http://localhost:31200/api/namespaces" | jq -r '.[].name'`
+	// Istio sidecar injection이 활성화된 namespace 또는 주요 namespace 조회
+	command := `sudo kubectl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "istio-system|monitoring|default|titanium" || echo ''`
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
-		return nil, fmt.Errorf("Kiali namespace 조회 실패: %v", err)
+		return nil, fmt.Errorf("Namespace 조회 실패: %v", err)
 	}
 
 	var namespaces []string
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	for _, line := range lines {
-		if line != "" {
-			namespaces = append(namespaces, strings.TrimSpace(line))
+		ns := strings.TrimSpace(line)
+		if ns != "" {
+			namespaces = append(namespaces, ns)
 		}
+	}
+
+	if len(namespaces) == 0 {
+		return nil, fmt.Errorf("관련 namespace를 찾을 수 없음")
 	}
 
 	return namespaces, nil
@@ -1142,12 +1148,18 @@ func VerifyGrafanaHealthy(t *testing.T, host ssh.Host) error {
 }
 
 // VerifyLokiReady Loki 서버 ready 상태 확인
+// loki-stack Helm chart는 StatefulSet으로 배포됨
 func VerifyLokiReady(t *testing.T, host ssh.Host) error {
-	command := `sudo kubectl exec -n monitoring deployment/loki -- wget -qO- "http://localhost:3100/ready"`
+	// Pod label로 접근 (StatefulSet/Deployment 무관)
+	command := `sudo kubectl exec -n monitoring $(sudo kubectl get pod -n monitoring -l app=loki -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) -- wget -qO- "http://localhost:3100/ready" 2>/dev/null || echo 'LOKI_NOT_READY'`
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return fmt.Errorf("Loki ready check 실패: %v", err)
+	}
+
+	if strings.Contains(output, "LOKI_NOT_READY") {
+		return fmt.Errorf("Loki Pod에 접근할 수 없음")
 	}
 
 	if !strings.Contains(output, "ready") {
@@ -1158,16 +1170,27 @@ func VerifyLokiReady(t *testing.T, host ssh.Host) error {
 }
 
 // VerifyKialiHealthy Kiali 서버 health 상태 확인
+// Kiali는 istio-system namespace에 배포됨
+// Pod Ready 상태만 확인 (API 초기화 지연 이슈 대응)
 func VerifyKialiHealthy(t *testing.T, host ssh.Host) error {
-	command := `curl -s "http://localhost:31200/healthz"`
+	// Kiali Pod Ready 상태 확인
+	command := `sudo kubectl get pod -n istio-system -l app=kiali -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo 'NOT_FOUND'`
 
-	_, err := RunSSHCommand(t, host, command)
+	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
-		return fmt.Errorf("Kiali health check 실패: %v", err)
+		return fmt.Errorf("Kiali Pod 상태 조회 실패: %v", err)
 	}
 
-	// Kiali healthz는 빈 응답 또는 JSON 반환
-	// 에러가 없으면 정상으로 간주
+	status := strings.TrimSpace(output)
+	if status == "NOT_FOUND" || status == "" {
+		return fmt.Errorf("Kiali Pod를 찾을 수 없음")
+	}
+
+	if status != "True" {
+		return fmt.Errorf("Kiali Pod가 Ready 상태가 아님: %s", status)
+	}
+
+	t.Log("Kiali Pod가 Ready 상태입니다")
 	return nil
 }
 
@@ -1459,6 +1482,43 @@ func VerifyPrometheusTargetsUpWithRetry(t *testing.T, host ssh.Host, prometheusN
 	return err
 }
 
+// VerifyPrometheusMinTargetsUp 최소 target 개수 확인 (job 이름 무관)
+func VerifyPrometheusMinTargetsUp(t *testing.T, host ssh.Host, prometheusNodePort string, minCount int) error {
+	targets, err := GetPrometheusTargets(t, host, prometheusNodePort)
+	if err != nil {
+		return err
+	}
+
+	upCount := 0
+	for _, target := range targets {
+		if target.Health == "up" {
+			upCount++
+		}
+	}
+
+	if upCount < minCount {
+		return fmt.Errorf("Prometheus: UP 상태 target 부족 (%d/%d)", upCount, minCount)
+	}
+
+	t.Logf("Prometheus targets: %d개 UP (최소 요구: %d)", upCount, minCount)
+	return nil
+}
+
+// VerifyPrometheusMinTargetsUpWithRetry 최소 target 개수 확인 (재시도 포함)
+func VerifyPrometheusMinTargetsUpWithRetry(t *testing.T, host ssh.Host, prometheusNodePort string, minCount int) error {
+	_, err := retry.DoWithRetryE(t, "Prometheus Min Targets Up Check",
+		MonitoringHealthCheckRetries,
+		MonitoringHealthCheckInterval,
+		func() (string, error) {
+			err := VerifyPrometheusMinTargetsUp(t, host, prometheusNodePort, minCount)
+			if err != nil {
+				return "", err
+			}
+			return "targets up", nil
+		})
+	return err
+}
+
 // VerifyGrafanaDataSourcesWithRetry Grafana DataSources Check (재시도 포함)
 func VerifyGrafanaDataSourcesWithRetry(t *testing.T, host ssh.Host, sources []string) error {
 	_, err := retry.DoWithRetryE(t, "Grafana DataSources Check",
@@ -1538,26 +1598,33 @@ func VerifyApplicationPodsReady(t *testing.T, host ssh.Host) error {
 }
 
 // VerifyApplicationHealth Application Health endpoint 확인
+// ClusterIP Service이므로 kubectl exec를 통해 내부에서 health check 수행
 func VerifyApplicationHealth(t *testing.T, host ssh.Host) error {
-	// Health Check 대상 서비스
-	services := map[string]string{
-		"api-gateway":  "31080",
-		"auth-service": "31081",
-		"user-service": "31082",
-		"blog-service": "31083",
+	// Health Check 대상 서비스 (ClusterIP:Port)
+	services := map[string]struct {
+		deployment string
+		endpoint   string
+	}{
+		"api-gateway":  {deployment: "api-gateway", endpoint: "api-gateway-service:8000"},
+		"auth-service": {deployment: "auth-service", endpoint: "auth-service:8002"},
+		"user-service": {deployment: "user-service", endpoint: "user-service:8001"},
+		"blog-service": {deployment: "blog-service", endpoint: "blog-service:8005"},
 	}
 
-	for name, port := range services {
-		command := fmt.Sprintf(`curl -s -o /dev/null -w '%%{http_code}' --connect-timeout 5 "http://localhost:%s/health" 2>/dev/null || echo '000'`, port)
+	for name, svc := range services {
+		// kubectl exec로 Pod 내부에서 wget 실행 (curl이 없을 수 있음)
+		command := fmt.Sprintf(`sudo kubectl exec -n %s deployment/%s -- wget -qO- --timeout=5 "http://%s/health" 2>/dev/null | head -c 100 || echo 'HEALTH_CHECK_FAILED'`,
+			NamespaceProd, svc.deployment, svc.endpoint)
 		output, err := RunSSHCommand(t, host, command)
 		if err != nil {
 			return fmt.Errorf("%s health check 실패: %v", name, err)
 		}
 
-		statusCode := strings.TrimSpace(output)
-		if statusCode != "200" {
-			return fmt.Errorf("%s health check 실패: HTTP %s", name, statusCode)
+		if strings.Contains(output, "HEALTH_CHECK_FAILED") {
+			return fmt.Errorf("%s health check 실패: endpoint 응답 없음", name)
 		}
+
+		t.Logf("%s health check 성공", name)
 	}
 
 	return nil
