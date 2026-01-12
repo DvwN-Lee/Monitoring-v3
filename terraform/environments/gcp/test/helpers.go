@@ -79,6 +79,17 @@ func GetDefaultTerraformOptions(t *testing.T) *terraform.Options {
 	return opts
 }
 
+// GetApplyTerraformOptions Apply 테스트용 Terraform 옵션 반환 (고유 클러스터 이름 사용)
+// 병렬 테스트 실행 시 리소스 충돌을 방지하기 위해 고유한 cluster_name 생성
+func GetApplyTerraformOptions(t *testing.T) *terraform.Options {
+	opts := GetDefaultTerraformOptions(t)
+	// 고유 클러스터 이름 생성 (6자리 lowercase alphanumeric)
+	uniqueID := strings.ToLower(random.UniqueId())
+	opts.Vars["cluster_name"] = fmt.Sprintf("terratest-%s", uniqueID)
+	t.Logf("Apply 테스트용 고유 클러스터 이름: %s", opts.Vars["cluster_name"])
+	return opts
+}
+
 // createSSHTfvars SSH 허용 CIDR을 위한 tfvars 파일 생성
 func createSSHTfvars(t *testing.T, ip string) string {
 	tfvarsContent := fmt.Sprintf(`ssh_allowed_cidrs = ["%s/32"]`, ip)
