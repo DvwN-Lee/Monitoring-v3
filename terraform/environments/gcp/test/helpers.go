@@ -35,6 +35,7 @@ const (
 	TestPostgresPassword    = "TerratestPassword123!"
 	TestGrafanaPassword     = "TerratestGrafana123!"
 	SSHUsername             = "ubuntu"
+	UseSpotForWorkers       = false // Issue #37: Spot Instance InvalidDiskCapacity 오류 대응
 )
 
 // 타임아웃 상수
