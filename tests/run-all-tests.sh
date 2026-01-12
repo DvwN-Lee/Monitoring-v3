@@ -189,13 +189,13 @@ main() {
         exit 1
     fi
 
-    # Level 3: Individual Service Tests
-    log_section "Level 3: Individual Service Tests"
-    run_test_script "${SCRIPT_DIR}/unit/api-gateway-test.sh" "API Gateway" "level3" || true
-    run_test_script "${SCRIPT_DIR}/unit/auth-service-test.sh" "Auth Service" "level3" || true
-    run_test_script "${SCRIPT_DIR}/unit/user-service-test.sh" "User Service" "level3" || true
-    run_test_script "${SCRIPT_DIR}/unit/blog-service-test.sh" "Blog Service" "level3" || true
-    run_test_script "${SCRIPT_DIR}/unit/database-test.sh" "Database/Cache" "level3" || true
+    # Level 3: Smoke Tests (Service Health/API)
+    log_section "Level 3: Smoke Tests (Service Health/API)"
+    run_test_script "${SCRIPT_DIR}/smoke/api-gateway-test.sh" "API Gateway" "level3" || true
+    run_test_script "${SCRIPT_DIR}/smoke/auth-service-test.sh" "Auth Service" "level3" || true
+    run_test_script "${SCRIPT_DIR}/smoke/user-service-test.sh" "User Service" "level3" || true
+    run_test_script "${SCRIPT_DIR}/smoke/blog-service-test.sh" "Blog Service" "level3" || true
+    run_test_script "${SCRIPT_DIR}/smoke/database-test.sh" "Database/Cache" "level3" || true
 
     # Level 2: Integration Tests
     log_section "Level 2: Integration Tests"
