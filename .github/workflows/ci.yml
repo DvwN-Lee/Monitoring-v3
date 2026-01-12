@@ -59,9 +59,50 @@ jobs:
             api-gateway:
               - 'api-gateway/**'
 
+  unit-test:
+    name: Unit Tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python Services (auth-service, user-service, blog-service)
+      - name: Set up Python
+        if: matrix.service != 'api-gateway'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies and run tests
+        if: matrix.service != 'api-gateway'
+        run: |
+          cd ${{ matrix.service }}
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pytest tests/ -v --tb=short
+
+      # Go Service (api-gateway)
+      - name: Set up Go
+        if: matrix.service == 'api-gateway'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run Go tests
+        if: matrix.service == 'api-gateway'
+        run: |
+          cd api-gateway
+          go test -v ./...
+
   build-and-scan:
     name: Build and Scan
-    needs: detect-changes
+    needs: [detect-changes, unit-test]
     if: needs.detect-changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     strategy:
