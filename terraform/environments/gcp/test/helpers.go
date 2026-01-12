@@ -936,37 +936,34 @@ type PrometheusTargetsResponse struct {
 func GetPrometheusTargets(t *testing.T, host ssh.Host, prometheusNodePort string) ([]PrometheusTarget, error) {
 	// kubectl run으로 임시 Pod 생성하여 Prometheus API 호출 (NodePort 의존성 제거)
 	// prometheusNodePort 파라미터는 하위 호환성을 위해 유지하지만 실제로는 ClusterIP 사용
-	// --quiet 플래그가 없으므로 출력에서 JSON만 추출
+	// 2>/dev/null로 "pod/xxx deleted" 메시지를 stderr로 분리하여 JSON 파싱 문제 해결
 	podSuffix := time.Now().UnixNano() % 10000
-	command := fmt.Sprintf(`sudo kubectl run prometheus-targets-%d --rm -i --restart=Never --image=curlimages/curl:8.5.0 --timeout=30s -- curl -s "%s/api/v1/targets" 2>&1`, podSuffix, PrometheusClusterURL)
+	command := fmt.Sprintf(`sudo kubectl run prometheus-targets-%d --rm -i --restart=Never --image=curlimages/curl:8.5.0 --timeout=60s -- curl -s --max-time 50 "%s/api/v1/targets" 2>/dev/null`, podSuffix, PrometheusClusterURL)
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return nil, fmt.Errorf("Prometheus API 호출 실패: %v", err)
 	}
 
-	// kubectl run 출력에서 완전한 JSON 부분만 추출
-	// 출력 형식: {"status":"success",...} + "pod/xxx deleted" 또는 다른 메시지
+	// 출력에서 JSON 부분만 추출 (앞뒤 공백 제거)
 	output = strings.TrimSpace(output)
 	jsonStart := strings.Index(output, "{")
 	if jsonStart == -1 {
-		return nil, fmt.Errorf("Prometheus API 응답에서 JSON을 찾을 수 없음: %s", output)
+		return nil, fmt.Errorf("Prometheus API 응답에서 JSON을 찾을 수 없음: %s", output[:min(len(output), 200)])
 	}
 
-	// JSON의 끝을 찾기 위해 마지막 줄바꿈 또는 "pod/" 시작 지점을 찾음
+	// JSON 시작부터 끝까지 추출 (마지막 } 찾기)
 	jsonOutput := output[jsonStart:]
-	// "pod/" 메시지가 있으면 그 전까지만 사용
-	if podIdx := strings.Index(jsonOutput, "pod/"); podIdx > 0 {
-		jsonOutput = strings.TrimSpace(jsonOutput[:podIdx])
+	// 마지막으로 완전한 JSON 객체의 끝을 찾음
+	lastBrace := strings.LastIndex(jsonOutput, "}")
+	if lastBrace == -1 {
+		return nil, fmt.Errorf("Prometheus API 응답에서 JSON 끝을 찾을 수 없음")
 	}
-	// 개행이 있으면 첫 번째 완전한 줄만 사용 (JSON은 보통 한 줄)
-	if newlineIdx := strings.Index(jsonOutput, "\n"); newlineIdx > 0 {
-		jsonOutput = strings.TrimSpace(jsonOutput[:newlineIdx])
-	}
+	jsonOutput = jsonOutput[:lastBrace+1]
 
 	var response PrometheusTargetsResponse
 	if err := json.Unmarshal([]byte(jsonOutput), &response); err != nil {
-		return nil, fmt.Errorf("Prometheus 응답 JSON 파싱 실패: %v (output: %s)", err, jsonOutput[:min(len(jsonOutput), 200)])
+		return nil, fmt.Errorf("Prometheus 응답 JSON 파싱 실패: %v (output length: %d)", err, len(jsonOutput))
 	}
 
 	if response.Status != "success" {
