@@ -47,7 +47,8 @@ func TestNetworkLayer(t *testing.T) {
 	t.Parallel()
 
 	// Network 리소스만 target으로 지정
-	terraformOptions := GetDefaultTerraformOptions(t)
+	// GetApplyTerraformOptions: 고유 클러스터 이름 사용 (병렬 테스트 충돌 방지)
+	terraformOptions := GetApplyTerraformOptions(t)
 	terraformOptions.Targets = []string{
 		"google_compute_network.vpc",
 		"google_compute_subnetwork.subnet",
@@ -128,9 +129,9 @@ func testSubnetConfiguration(t *testing.T, subnetName string) {
 	projectID := DefaultProjectID
 	region := DefaultRegion
 
-	// gcloud compute subnetworks describe
+	// gcloud compute networks subnets describe
 	output, err := runGcloudCommand(t,
-		"compute", "subnetworks", "describe", subnetName,
+		"compute", "networks", "subnets", "describe", subnetName,
 		"--project", projectID,
 		"--region", region,
 		"--format", "json",
@@ -239,7 +240,7 @@ func TestNetworkPlanOnly(t *testing.T) {
 		"google_compute_firewall.allow_ssh",
 		"google_compute_firewall.allow_k8s_api",
 		"google_compute_firewall.allow_internal",
-		"google_compute_firewall.allow_nodeport",
+		"google_compute_firewall.allow_dashboards",
 	}
 
 	terraform.Init(t, terraformOptions)
@@ -278,7 +279,8 @@ func TestFirewallSourceRangesPolicy(t *testing.T) {
 	t.Parallel()
 
 	// Network 리소스만 target으로 지정
-	terraformOptions := GetDefaultTerraformOptions(t)
+	// GetApplyTerraformOptions: 고유 클러스터 이름 사용 (병렬 테스트 충돌 방지)
+	terraformOptions := GetApplyTerraformOptions(t)
 	terraformOptions.Targets = []string{
 		"google_compute_network.vpc",
 		"google_compute_subnetwork.subnet",
@@ -291,7 +293,8 @@ func TestFirewallSourceRangesPolicy(t *testing.T) {
 	defer terraform.Destroy(t, terraformOptions)
 	terraform.InitAndApply(t, terraformOptions)
 
-	clusterName := DefaultClusterName
+	// terraformOptions에서 동적으로 생성된 cluster_name 사용
+	clusterName := terraformOptions.Vars["cluster_name"].(string)
 	projectID := DefaultProjectID
 
 	t.Run("SSHFirewallRestrictedToIAP", func(t *testing.T) {

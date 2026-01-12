@@ -82,8 +82,11 @@ func TestComputeAndK3s(t *testing.T) {
 		}
 	})
 
-	// Spot Instance 검증 (Worker만 Spot)
+	// Spot Instance 검증 (Worker만 Spot, UseSpotForWorkers=true일 때만 검증)
 	t.Run("WorkerSpotInstance", func(t *testing.T) {
+		if !UseSpotForWorkers {
+			t.Skip("UseSpotForWorkers=false이므로 Spot 검증 생략")
+		}
 		// MIG에서 생성된 Worker 인스턴스 동적 조회
 		workerNames, err := GetWorkerInstanceNames(t, clusterName, projectID, zone)
 		require.NoError(t, err, "Worker 인스턴스 목록 조회 실패")

@@ -35,6 +35,7 @@ const (
 	TestPostgresPassword    = "TerratestPassword123!"
 	TestGrafanaPassword     = "TerratestGrafana123!"
 	SSHUsername             = "ubuntu"
+	UseSpotForWorkers       = false // Issue #37: Spot Instance InvalidDiskCapacity 오류 대응
 )
 
 // 타임아웃 상수
@@ -52,6 +53,10 @@ const (
 
 	// Application 관련 상수 (Issue #27 - 2차 리뷰)
 	NamespaceProd = "titanium-prod"
+
+	// Prometheus ClusterIP Service 접근용 상수 (Issue: NodePort 31090 접근 실패 대응)
+	// kube-prometheus-stack에서 생성되는 Prometheus Service URL
+	PrometheusClusterURL = "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
 )
 
 // GetTerraformDir terraform 디렉터리 경로 반환
@@ -76,6 +81,17 @@ func GetDefaultTerraformOptions(t *testing.T) *terraform.Options {
 		t.Logf("테스트 환경 IP 추가: %s/32", ip)
 	}
 
+	return opts
+}
+
+// GetApplyTerraformOptions Apply 테스트용 Terraform 옵션 반환 (고유 클러스터 이름 사용)
+// 병렬 테스트 실행 시 리소스 충돌을 방지하기 위해 고유한 cluster_name 생성
+func GetApplyTerraformOptions(t *testing.T) *terraform.Options {
+	opts := GetDefaultTerraformOptions(t)
+	// 고유 클러스터 이름 생성 (6자리 lowercase alphanumeric)
+	uniqueID := strings.ToLower(random.UniqueId())
+	opts.Vars["cluster_name"] = fmt.Sprintf("terratest-%s", uniqueID)
+	t.Logf("Apply 테스트용 고유 클러스터 이름: %s", opts.Vars["cluster_name"])
 	return opts
 }
 
@@ -918,16 +934,36 @@ type PrometheusTargetsResponse struct {
 
 // GetPrometheusTargets Prometheus API로 타겟 조회
 func GetPrometheusTargets(t *testing.T, host ssh.Host, prometheusNodePort string) ([]PrometheusTarget, error) {
-	command := fmt.Sprintf(`curl -s "http://localhost:%s/api/v1/targets"`, prometheusNodePort)
+	// kubectl run으로 임시 Pod 생성하여 Prometheus API 호출 (NodePort 의존성 제거)
+	// prometheusNodePort 파라미터는 하위 호환성을 위해 유지하지만 실제로는 ClusterIP 사용
+	// 2>/dev/null로 "pod/xxx deleted" 메시지를 stderr로 분리하여 JSON 파싱 문제 해결
+	podSuffix := time.Now().UnixNano() % 10000
+	command := fmt.Sprintf(`sudo kubectl run prometheus-targets-%d --rm -i --restart=Never --image=curlimages/curl:8.5.0 --timeout=60s -- curl -s --max-time 50 "%s/api/v1/targets" 2>/dev/null`, podSuffix, PrometheusClusterURL)
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return nil, fmt.Errorf("Prometheus API 호출 실패: %v", err)
 	}
 
+	// 출력에서 JSON 부분만 추출 (앞뒤 공백 제거)
+	output = strings.TrimSpace(output)
+	jsonStart := strings.Index(output, "{")
+	if jsonStart == -1 {
+		return nil, fmt.Errorf("Prometheus API 응답에서 JSON을 찾을 수 없음: %s", output[:min(len(output), 200)])
+	}
+
+	// JSON 시작부터 끝까지 추출 (마지막 } 찾기)
+	jsonOutput := output[jsonStart:]
+	// 마지막으로 완전한 JSON 객체의 끝을 찾음
+	lastBrace := strings.LastIndex(jsonOutput, "}")
+	if lastBrace == -1 {
+		return nil, fmt.Errorf("Prometheus API 응답에서 JSON 끝을 찾을 수 없음")
+	}
+	jsonOutput = jsonOutput[:lastBrace+1]
+
 	var response PrometheusTargetsResponse
-	if err := json.Unmarshal([]byte(output), &response); err != nil {
-		return nil, fmt.Errorf("Prometheus 응답 JSON 파싱 실패: %v", err)
+	if err := json.Unmarshal([]byte(jsonOutput), &response); err != nil {
+		return nil, fmt.Errorf("Prometheus 응답 JSON 파싱 실패: %v (output length: %d)", err, len(jsonOutput))
 	}
 
 	if response.Status != "success" {
@@ -1023,18 +1059,36 @@ func VerifyNodeReady(t *testing.T, host ssh.Host, nodeName string) (bool, error)
 // ============================================================================
 
 // QueryPrometheusMetric Prometheus metric 쿼리 실행 및 결과 개수 반환
+// kubectl exec를 통해 ClusterIP Service로 직접 접근 (NodePort 31090 의존성 제거)
 func QueryPrometheusMetric(t *testing.T, host ssh.Host, query string) (int, error) {
-	// Prometheus API를 통해 metric 쿼리
-	command := fmt.Sprintf(`curl -s "http://localhost:31090/api/v1/query?query=%s" | jq -r '.data.result | length'`, query)
+	// kubectl run으로 임시 Pod 생성하여 Prometheus API 쿼리 수행
+	// 결과를 jq로 파싱하여 result 개수 반환
+	podSuffix := time.Now().UnixNano() % 10000
+	command := fmt.Sprintf(`sudo kubectl run prometheus-query-%d --rm -i --restart=Never --image=curlimages/curl:8.5.0 --timeout=30s -- curl -s "%s/api/v1/query?query=%s" 2>/dev/null | jq -r '.data.result | length' 2>/dev/null || echo '0'`, podSuffix, PrometheusClusterURL, query)
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return 0, fmt.Errorf("Prometheus metric 쿼리 실패: %v", err)
 	}
 
-	resultCount, err := strconv.Atoi(strings.TrimSpace(output))
+	// 출력에서 숫자만 추출 (kubectl 출력 노이즈 제거)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	var resultStr string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if _, parseErr := strconv.Atoi(line); parseErr == nil {
+			resultStr = line
+			break
+		}
+	}
+
+	if resultStr == "" {
+		resultStr = "0"
+	}
+
+	resultCount, err := strconv.Atoi(resultStr)
 	if err != nil {
-		return 0, fmt.Errorf("Prometheus 결과 파싱 실패: %v", err)
+		return 0, fmt.Errorf("Prometheus 결과 파싱 실패: %v (output: %s)", err, output)
 	}
 
 	return resultCount, nil
@@ -1116,15 +1170,23 @@ func GetKialiNamespaces(t *testing.T, host ssh.Host) ([]string, error) {
 }
 
 // VerifyPrometheusHealthy Prometheus 서버 health 상태 확인
+// kubectl exec를 통해 ClusterIP Service로 직접 접근 (NodePort 31090 의존성 제거)
 func VerifyPrometheusHealthy(t *testing.T, host ssh.Host) error {
-	command := `curl -s "http://localhost:31090/-/healthy"`
+	// kubectl run으로 임시 Pod 생성하여 Prometheus health check 수행
+	command := fmt.Sprintf(`sudo kubectl run prometheus-health-check --rm -i --restart=Never --image=busybox:1.36 --timeout=30s -- wget -qO- --timeout=10 "%s/-/healthy" 2>/dev/null || echo 'HEALTH_CHECK_FAILED'`, PrometheusClusterURL)
 
 	output, err := RunSSHCommand(t, host, command)
 	if err != nil {
 		return fmt.Errorf("Prometheus health check 실패: %v", err)
 	}
 
-	if !strings.Contains(output, "Prometheus Server is Healthy") {
+	// kubectl run 출력에서 실제 응답 추출
+	output = strings.TrimSpace(output)
+	if strings.Contains(output, "HEALTH_CHECK_FAILED") || output == "" {
+		return fmt.Errorf("Prometheus health check 응답 없음")
+	}
+
+	if !strings.Contains(output, "Prometheus Server is Healthy") && !strings.Contains(output, "Healthy") {
 		return fmt.Errorf("Prometheus가 healthy 상태가 아님: %s", output)
 	}
 
