@@ -17,14 +17,18 @@ import (
 func TestMonitoringStackValidation(t *testing.T) {
 	t.Parallel()
 
-	terraformOptions := GetDefaultTerraformOptions(t)
+	// GetApplyTerraformOptions: 고유 클러스터 이름 사용 (병렬 테스트 충돌 방지)
+	terraformOptions := GetApplyTerraformOptions(t)
 	defer terraform.Destroy(t, terraformOptions)
 	terraform.InitAndApply(t, terraformOptions)
+
+	// 동적으로 생성된 cluster_name 사용
+	clusterName := terraformOptions.Vars["cluster_name"].(string)
 
 	// Issue #37: wait_for_instances=false로 변경됨에 따라
 	// Worker 인스턴스 RUNNING 상태 대기 (MIG 15분 타임아웃 방지)
 	t.Log("Worker 인스턴스 RUNNING 상태 대기 중...")
-	workerNames, err := GetWorkerInstanceNamesWithRetry(t, DefaultClusterName, DefaultProjectID, DefaultZone, DefaultWorkerCount)
+	workerNames, err := GetWorkerInstanceNamesWithRetry(t, clusterName, DefaultProjectID, DefaultZone, DefaultWorkerCount)
 	require.NoError(t, err, "Worker 인스턴스 RUNNING 대기 실패")
 	t.Logf("Worker 인스턴스 RUNNING 확인: %v", workerNames)
 
