@@ -3,6 +3,10 @@ kind: Service
 metadata:
   name: postgresql-service
   namespace: titanium-prod
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: titanium
+    app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     app: postgresql
