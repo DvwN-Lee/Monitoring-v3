@@ -32,10 +32,6 @@ resource "kubernetes_manifest" "loki_stack_application" {
           values = <<-EOT
             loki:
               enabled: true
-              # Grafana 10.x Logs Volume 호환성을 위해 Loki 2.9.3 사용
-              # (drop 연산자는 Loki 2.9.0부터 지원)
-              image:
-                tag: 2.9.3
               persistence:
                 enabled: true
                 size: ${var.loki_storage_size}
@@ -120,11 +116,16 @@ resource "kubernetes_manifest" "loki_stack_application" {
                         replacement: /var/log/pods/*$1/*.log
                     pipeline_stages:
                       - cri: {}
-                      # Plain Text 로그에서 Level 추출 (INFO:, ERROR:, WARNING:, DEBUG: 패턴)
-                      - regex:
-                          expression: '^(?P<level>[A-Z]+):'
+                      - json:
+                          expressions:
+                            level: level
+                            msg: message
+                            timestamp: timestamp
                       - labels:
                           level:
+                      - timestamp:
+                          source: timestamp
+                          format: RFC3339Nano
               resources:
                 limits:
                   cpu: 200m

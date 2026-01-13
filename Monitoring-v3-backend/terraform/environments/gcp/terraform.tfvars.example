@@ -1,0 +1,27 @@
+# GCP Environment Configuration Example
+
+# GCP Project ID (required)
+project_id = "your-gcp-project-id"
+
+# GCP Region and Zone
+region = "asia-northeast3"
+zone   = "asia-northeast3-a"
+
+# Cluster Configuration
+cluster_name = "titanium-k3s"
+worker_count = 2
+
+# Network Configuration
+subnet_cidr = "10.128.0.0/20"
+
+# Instance Configuration
+master_machine_type = "e2-medium"
+worker_machine_type = "e2-medium"
+os_image            = "ubuntu-os-cloud/ubuntu-2204-lts"
+
+# SSH Configuration
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# PostgreSQL Configuration (sensitive)
+# Set via environment variable: export TF_VAR_postgres_password="your-password"
+# postgres_password = "your-secure-password"

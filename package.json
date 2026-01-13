@@ -1,0 +1,28 @@
+{
+  "name": "monitoring-v3",
+  "version": "1.0.0",
+  "description": "GCP 기반 k3s Kubernetes Cluster Infrastructure 및 GitOps 자동화 프로젝트",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DvwN-Lee/Monitoring-v3.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DvwN-Lee/Monitoring-v3/issues"
+  },
+  "homepage": "https://github.com/DvwN-Lee/Monitoring-v3#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}
