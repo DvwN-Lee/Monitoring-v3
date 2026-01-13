@@ -1,0 +1,114 @@
+# Loki 3.x TSDB 기반 values.yaml
+# 기존 loki-stack-2.10.2에서 마이그레이션
+
+# 단일 바이너리 모드 설정
+deploymentMode: SingleBinary
+
+loki:
+  # Loki 설정
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  # TSDB 스토리지 설정
+  storage:
+    type: filesystem
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+
+  # TSDB Schema 설정 (v13)
+  schemaConfig:
+    configs:
+      - from: "2025-11-01"  # 마이그레이션 시작 날짜
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  # 리소스 제한
+  limits_config:
+    ingestion_burst_size_mb: 20
+    ingestion_rate_mb: 10
+    max_entries_limit_per_query: 5000
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    retention_period: 168h  # 7일 보존
+
+  # Compactor 설정 (TSDB 정리)
+  compactor:
+    working_directory: /var/loki/compactor
+    compaction_interval: 10m
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+    delete_request_store: filesystem
+
+  # 서버 설정
+  server:
+    http_listen_port: 3100
+    grpc_listen_port: 9095
+
+# 스토리지 설정 (PVC)
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: null  # 기본 StorageClass 사용
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # 서비스 이름 변경 (기존 loki와 충돌 방지)
+  service:
+    type: ClusterIP
+    port: 3100
+
+# Gateway 비활성화 (단순 구성)
+gateway:
+  enabled: false
+
+# 읽기/쓰기 분리 비활성화 (단일 바이너리 모드)
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# 모니터링 설정
+monitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+
+  # 셀프 모니터링
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+# 테스트 Pod 비활성화
+test:
+  enabled: false
+
+# 캐시 비활성화 (메모리 절약)
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+# Canary 비활성화 (불필요)
+lokiCanary:
+  enabled: false
