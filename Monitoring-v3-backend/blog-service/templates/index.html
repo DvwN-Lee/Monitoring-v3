@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DvwN's Blog</title>
+    <link rel="stylesheet" href="/blog/static/css/style.css">
+    <!-- Syntax Highlighting CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- 헤더 -->
+    <header>
+        <div class="container">
+            <h1><a href="#/" id="blog-title">DvwN's Blog</a></h1>
+            <div class="header-actions" id="auth-status">
+                <button class="btn btn-primary" id="login-btn">로그인</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 메인 콘텐츠 영역 -->
+        <div id="main-content"></div>
+    </div>
+
+    <!-- 게시물 목록 템플릿 -->
+    <template id="post-list-template">
+        <div class="view-container">
+            <div class="category-filter" role="tablist" aria-label="카테고리 필터">
+                <!-- 동적 카테고리 탭이 여기에 생성됩니다 -->
+            </div>
+
+            <h2>최신 글</h2>
+            <ul class="post-list" id="posts-container" role="tabpanel"></ul>
+
+            <nav class="pagination" aria-label="페이지 네비게이션">
+                <button class="nav-button" id="prev-btn" aria-label="이전 페이지">Previous</button>
+                <div id="page-numbers" role="group" aria-label="페이지 번호"></div>
+                <button class="nav-button" id="next-btn" aria-label="다음 페이지">Next</button>
+            </nav>
+        </div>
+    </template>
+
+    <!-- 게시물 상세 템플릿 -->
+    <template id="post-detail-template">
+        <div class="view-container">
+            <div class="post-detail-header">
+                <h1 class="post-detail-title" id="detail-title"></h1>
+                <div class="post-detail-meta">
+                    <span id="detail-category"></span>
+                    <span id="detail-author"></span>
+                </div>
+            </div>
+            <div class="post-detail-content" id="detail-content"></div>
+            <div class="post-detail-actions">
+                <button class="btn btn-outline" id="back-btn">목록으로</button>
+                <button class="btn btn-outline hidden" id="edit-btn">수정</button>
+                <button class="btn btn-primary hidden" id="delete-btn">삭제</button>
+            </div>
+        </div>
+    </template>
+
+    <!-- 글쓰기/수정 폼 템플릿 -->
+    <template id="post-form-template">
+        <div class="view-container">
+            <h2 id="form-title">글 작성</h2>
+            <form id="post-form" class="form-container">
+                <div class="form-group">
+                    <label for="post-title">제목<span class="required-star">*</span></label>
+                    <input type="text" id="post-title" placeholder="제목을 입력하세요 (1~120자)" required maxlength="120">
+                </div>
+
+                <div class="form-group">
+                    <label for="category-select">카테고리<span class="required-star">*</span></label>
+                    <div class="radio-group">
+                        <!-- 동적 카테고리 입력 필드가 여기에 생성됩니다 -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="post-content">내용<span class="required-star">*</span></label>
+                    <textarea id="post-content" placeholder="내용을 입력하세요" required></textarea>
+                </div>
+
+                <div class="form-footer">
+                    <button type="submit" class="btn btn-primary">저장</button>
+                    <button type="button" class="btn btn-outline" id="cancel-btn">취소</button>
+                </div>
+                <p id="post-error" class="error-message"></p>
+            </form>
+        </div>
+    </template>
+
+    <!-- 로그인 모달 -->
+    <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+        <div class="modal-content">
+            <span class="modal-close" id="close-login" aria-label="모달 닫기">&times;</span>
+            <h2 id="login-modal-title">로그인</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-username">사용자 이름</label>
+                    <input type="text" id="login-username" placeholder="사용자 이름을 입력하세요" required aria-required="true">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">비밀번호</label>
+                    <input type="password" id="login-password" placeholder="비밀번호를 입력하세요" required aria-required="true">
+                </div>
+                <p id="login-error" class="error-message" role="alert" aria-live="polite"></p>
+                <div class="form-footer">
+                    <button type="submit" class="btn btn-primary">로그인</button>
+                </div>
+                <div class="form-link">
+                    계정이 없으신가요? <a id="go-to-signup" href="#" role="button">회원가입</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 회원가입 모달 -->
+    <div id="signup-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="signup-modal-title">
+        <div class="modal-content">
+            <span class="modal-close" id="close-signup" aria-label="모달 닫기">&times;</span>
+            <h2 id="signup-modal-title">회원가입</h2>
+            <form id="signup-form">
+                <div class="form-group">
+                    <label for="signup-username">사용자 이름</label>
+                    <input type="text" id="signup-username" placeholder="사용자 이름을 입력하세요" required aria-required="true">
+                </div>
+                <div class="form-group">
+                    <label for="signup-email">이메일</label>
+                    <input type="email" id="signup-email" placeholder="example@domain.com" required aria-required="true">
+                </div>
+                <div class="form-group">
+                    <label for="signup-password">비밀번호</label>
+                    <input type="password" id="signup-password" placeholder="비밀번호를 입력하세요" required aria-required="true">
+                </div>
+                <p id="signup-error" class="error-message" role="alert" aria-live="polite"></p>
+                <div class="form-footer">
+                    <button type="submit" class="btn btn-primary">계정 생성</button>
+                </div>
+                <div class="form-link">
+                    이미 계정이 있으신가요? <a id="go-to-login" href="#" role="button">로그인</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Markdown 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- XSS 방어 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <!-- Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="/blog/static/js/app.js"></script>
+</body>
+</html>

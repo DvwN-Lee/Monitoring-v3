@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: blog-service
+  namespace: titanium-prod
+  labels:
+    app: blog-service
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: blog-service
+  endpoints:
+  - targetPort: http
+    path: /metrics
+    interval: 30s

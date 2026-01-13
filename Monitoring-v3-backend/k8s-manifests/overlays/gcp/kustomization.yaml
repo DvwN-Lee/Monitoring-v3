@@ -1,0 +1,128 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace for all resources
+namespace: titanium-prod
+
+# Name prefix for all resources
+namePrefix: prod-
+
+# Base resources
+resources:
+  - ../../base
+  - namespace.yaml
+  # PostgreSQL Resources
+  - postgres/configmap.yaml
+  - postgres/pvc.yaml
+  - postgres/service.yaml
+  - postgres/statefulset.yaml
+  # Istio resources enabled (gateway.yaml includes VirtualService)
+  - istio/gateway.yaml
+  - istio/peer-authentication.yaml
+  - istio/peer-authentication-databases.yaml
+  - istio/destination-rules.yaml
+  - istio/servicemonitors.yaml
+  # Application ServiceMonitors (currently disabled)
+  # Reason: Istio mTLS STRICT mode blocks Prometheus scraping from outside mesh
+  # Solution: Use Envoy proxy metrics (istio_requests_total) for now
+  # Future: Enable with TLS config when application custom metrics are needed
+  # Reference: https://istio.io/latest/docs/ops/integrations/prometheus/
+  # - application-servicemonitors.yaml
+
+# Patches for GCP environment
+patches:
+  # Secret은 Terraform kubernetes module에서 관리
+
+  # Remove SQLite PVC from user-service deployment
+  - path: patches/user-service-deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: user-service-deployment
+
+  # Update blog-service deployment for PostgreSQL
+  - path: patches/blog-service-deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: blog-service-deployment
+
+  # Inject secrets into auth-service
+  - path: patches/auth-service-deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: auth-service-deployment
+
+  # Add Istio sidecar resource limits to all Deployments
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+      spec:
+        template:
+          metadata:
+            annotations:
+              sidecar.istio.io/proxyCPU: "50m"
+              sidecar.istio.io/proxyCPULimit: "200m"
+              sidecar.istio.io/proxyMemory: "64Mi"
+              sidecar.istio.io/proxyMemoryLimit: "256Mi"
+    target:
+      kind: Deployment
+
+# ConfigMap generator for production-specific config
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - USE_POSTGRES=true
+      - POSTGRES_HOST=prod-postgresql-service
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=titanium
+      - POSTGRES_SSLMODE=disable
+      - API_GATEWAY_URL=http://prod-api-gateway-service:8000
+      - USER_SERVICE_URL=http://prod-user-service:8001
+      - AUTH_SERVICE_URL=http://prod-auth-service:8002
+      - BLOG_SERVICE_URL=http://prod-blog-service:8005
+      - REDIS_HOST=prod-redis-service
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DEBUG_MODE=false
+      - APP_NAME=titanium
+      - APP_VERSION=2.0.0
+      - ALLOWED_ORIGINS=https://titanium.example.com
+
+# Secret management
+# SECURITY: Secrets are managed separately and NOT committed to Git
+# For local development: Create secrets manually using kubectl
+# For production: Use External Secrets Operator or cloud-native secret management
+# Reference: docs/SECRET_MANAGEMENT.md
+
+# Common labels for all resources
+labels:
+  - pairs:
+      environment: production
+      managed-by: kustomize
+      project: titanium
+
+# Images to use (updated with Docker Hub registry)
+images:
+  - name: dongju101/user-service
+    newTag: main-81fed50
+  - name: dongju101/blog-service
+    newTag: main-81fed50
+  - name: dongju101/auth-service
+    newTag: main-81fed50
+  - name: dongju101/api-gateway
+    newTag: main-4107225
+
+# Resource modifications
+replicas:
+  - name: user-service-deployment
+    count: 2
+  - name: blog-service-deployment
+    count: 2
+  - name: auth-service-deployment
+    count: 2
+  - name: api-gateway-deployment
+    count: 2

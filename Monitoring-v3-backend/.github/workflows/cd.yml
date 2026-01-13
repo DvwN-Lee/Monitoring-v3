@@ -1,0 +1,126 @@
+name: CD Pipeline - Update Manifests
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+env:
+  DOCKER_HUB_USERNAME: dongju101
+
+jobs:
+  update-manifests:
+    name: Update K8s Manifests
+    runs-on: ubuntu-latest
+    # CI가 성공적으로 완료된 경우에만 실행
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          # 토큰을 사용하여 커밋을 푸시할 수 있도록 설정
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get commit SHA
+        id: sha
+        run: |
+          # CI workflow가 실행된 커밋의 SHA 가져오기
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "Commit SHA: $COMMIT_SHA"
+          echo "Short SHA: $SHORT_SHA"
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          # CI workflow에서 변경된 서비스 감지
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.workflow_run.head_sha }}~1 ${{ github.event.workflow_run.head_sha }})
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SERVICES=""
+          for service in user-service blog-service auth-service api-gateway load-balancer dashboard-ui; do
+            if echo "$CHANGED_FILES" | grep -q "^${service}/"; then
+              SERVICES="$SERVICES $service"
+            fi
+          done
+
+          echo "Changed services: $SERVICES"
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+
+      - name: Update kustomization.yaml
+        if: steps.changes.outputs.services != ''
+        run: |
+          SHORT_SHA=${{ steps.sha.outputs.short_sha }}
+          SERVICES="${{ steps.changes.outputs.services }}"
+
+          echo "Updating image tags for services: $SERVICES"
+
+          # kustomization.yaml 파일 경로
+          KUSTOMIZE_FILE="k8s-manifests/overlays/gcp/kustomization.yaml"
+
+          # 각 Service의 이미지 태그 업데이트
+          for service in $SERVICES; do
+            echo "Updating $service to tag: main-$SHORT_SHA"
+
+            # yq 없이 sed를 사용하여 업데이트
+            # images 섹션에서 해당 Service의 newTag를 업데이트
+            sed -i.bak "/name: $DOCKER_HUB_USERNAME\/$service/,/newTag:/ s/newTag:.*/newTag: main-$SHORT_SHA/" $KUSTOMIZE_FILE
+          done
+
+          # 백업 파일 삭제
+          rm -f ${KUSTOMIZE_FILE}.bak
+
+          # 변경사항 확인
+          echo "Updated kustomization.yaml:"
+          cat $KUSTOMIZE_FILE
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.services != ''
+        run: |
+          SHORT_SHA=${{ steps.sha.outputs.short_sha }}
+          SERVICES="${{ steps.changes.outputs.services }}"
+
+          # 변경사항이 있는지 확인
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # 변경사항 커밋
+          git add k8s-manifests/overlays/gcp/kustomization.yaml
+
+          # 커밋 메시지 생성
+          git commit -m "chore: Update image tags to main-${SHORT_SHA}
+
+          Updated services: ${SERVICES}
+
+          [skip ci]"
+
+          git push origin main
+
+      - name: Summary
+        if: steps.changes.outputs.services != ''
+        run: |
+          echo "### ✅ Manifests Updated Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Updated Services:** ${{ steps.changes.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "**New Image Tag:** main-${{ steps.sha.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Argo CD will automatically sync these changes to the cluster." >> $GITHUB_STEP_SUMMARY
