@@ -1,0 +1,17 @@
+# Go test artifacts
+*.test
+*.out
+coverage.txt
+
+# Terraform test artifacts
+tfplan
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

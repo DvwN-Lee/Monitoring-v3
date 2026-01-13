@@ -1,0 +1,132 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: titanium-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  groups:
+  - name: titanium.application.rules
+    interval: 30s
+    rules:
+    # High Error Rate Alert
+    - alert: HighErrorRate
+      expr: |
+        sum(rate(http_requests_total{namespace="titanium-prod", status=~"5.."}[5m])) by (job)
+        /
+        sum(rate(http_requests_total{namespace="titanium-prod"}[5m])) by (job)
+        * 100 > 5
+      for: 5m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "High error rate detected on {{ $labels.job }}"
+        description: "{{ $labels.job }} has error rate of {{ $value | humanize }}% (threshold: 5%)"
+
+    # High Latency Alert
+    - alert: HighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(http_request_duration_seconds_bucket{namespace="titanium-prod"}[5m])) by (le, job)
+        ) > 1
+      for: 5m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "High latency detected on {{ $labels.job }}"
+        description: "{{ $labels.job }} has P95 latency of {{ $value | humanize }}s (threshold: 1s)"
+
+    # Service Down Alert
+    - alert: ServiceDown
+      expr: up{namespace="titanium-prod", job=~".*service.*"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        namespace: titanium-prod
+      annotations:
+        summary: "Service {{ $labels.job }} is down"
+        description: "{{ $labels.job }} has been down for more than 2 minutes"
+
+    # High Rate Limit Hits Alert
+    - alert: HighRateLimitHits
+      expr: |
+        sum(rate(http_requests_total{namespace="titanium-prod", status="429"}[5m])) by (job)
+        > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "Rate limiting이 자주 발생하고 있습니다 on {{ $labels.job }}"
+        description: "{{ $labels.job }}에서 5분 동안 429 응답이 {{ $value | humanize }} req/s로 지속 발생 중"
+
+  - name: titanium.infrastructure.rules
+    interval: 30s
+    rules:
+    # Pod CPU High Usage
+    - alert: PodCPUHigh
+      expr: |
+        sum(rate(container_cpu_usage_seconds_total{namespace="titanium-prod", pod=~"prod-.*"}[5m])) by (pod)
+        * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "High CPU usage on {{ $labels.pod }}"
+        description: "{{ $labels.pod }} CPU usage is {{ $value | humanize }}% (threshold: 80%)"
+
+    # Pod Memory High Usage
+    - alert: PodMemoryHigh
+      expr: |
+        sum(container_memory_working_set_bytes{namespace="titanium-prod", pod=~"prod-.*"}) by (pod)
+        /
+        sum(container_spec_memory_limit_bytes{namespace="titanium-prod", pod=~"prod-.*"}) by (pod)
+        * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "High memory usage on {{ $labels.pod }}"
+        description: "{{ $labels.pod }} memory usage is {{ $value | humanize }}% (threshold: 80%)"
+
+    # Pod Restart Alert
+    - alert: PodRestartingTooOften
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="titanium-prod"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        namespace: titanium-prod
+      annotations:
+        summary: "Pod {{ $labels.pod }} is restarting frequently"
+        description: "{{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+
+  - name: titanium.loki.rules
+    interval: 30s
+    rules:
+    # Loki Down Alert
+    - alert: LokiDown
+      expr: up{job="loki"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        namespace: monitoring
+      annotations:
+        summary: "Loki is down"
+        description: "Loki has been down for more than 5 minutes"
+
+    # Promtail Down Alert
+    - alert: PromtailDown
+      expr: up{job=~".*promtail.*"} == 0
+      for: 5m
+      labels:
+        severity: warning
+        namespace: monitoring
+      annotations:
+        summary: "Promtail instance down"
+        description: "Promtail on {{ $labels.instance }} has been down for more than 5 minutes"
