@@ -116,16 +116,11 @@ resource "kubernetes_manifest" "loki_stack_application" {
                         replacement: /var/log/pods/*$1/*.log
                     pipeline_stages:
                       - cri: {}
-                      - json:
-                          expressions:
-                            level: level
-                            msg: message
-                            timestamp: timestamp
+                      # Plain Text 로그에서 Level 추출 (INFO:, ERROR:, WARNING:, DEBUG: 패턴)
+                      - regex:
+                          expression: '^(?P<level>[A-Z]+):'
                       - labels:
                           level:
-                      - timestamp:
-                          source: timestamp
-                          format: RFC3339Nano
               resources:
                 limits:
                   cpu: 200m
