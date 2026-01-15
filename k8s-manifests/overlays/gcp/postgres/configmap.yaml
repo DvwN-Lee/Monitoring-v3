@@ -31,6 +31,9 @@ data:
         (3, 'Test', 'test')
     ON CONFLICT (id) DO NOTHING;
 
+    -- Synchronize categories_id_seq with existing data
+    SELECT setval('categories_id_seq', COALESCE((SELECT MAX(id) FROM categories), 1));
+
     -- Initialize posts table for blog-service
     CREATE TABLE IF NOT EXISTS posts (
         id SERIAL PRIMARY KEY,
