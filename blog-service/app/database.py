@@ -98,6 +98,11 @@ class BlogDatabase:
                     (3, 'Test', 'test', '#757575')
                 ''')
 
+            # Synchronize categories_id_seq with existing data
+            await conn.execute(
+                "SELECT setval('categories_id_seq', COALESCE((SELECT MAX(id) FROM categories), 1))"
+            )
+
             # Create posts table
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS posts (
