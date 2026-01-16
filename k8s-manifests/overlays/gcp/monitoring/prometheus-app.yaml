@@ -35,7 +35,10 @@ spec:
         # Grafana 설정
         grafana:
           enabled: true
-          adminPassword: admin123
+          admin:
+            existingSecret: grafana-admin-credentials
+            userKey: admin-user
+            passwordKey: admin-password
           service:
             type: NodePort
             nodePort: 30300
