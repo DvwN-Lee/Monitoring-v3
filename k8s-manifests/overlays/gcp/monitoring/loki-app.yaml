@@ -14,7 +14,7 @@ spec:
     helm:
       releaseName: loki
       valuesObject:
-        # 단일 바이너리 모드
+        # SingleBinary 모드
         deploymentMode: SingleBinary
 
         loki:
@@ -59,7 +59,7 @@ spec:
               cpu: 500m
               memory: 512Mi
 
-        # 불필요한 컴포넌트 비활성화
+        # 불필요한 Component 비활성화
         gateway:
           enabled: false
         read:
