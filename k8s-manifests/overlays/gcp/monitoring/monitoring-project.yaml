@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  description: Monitoring Stack Project (Prometheus, Loki, Promtail)
+  # Source Repository 제한
+  sourceRepos:
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+  # 배포 대상 Cluster/Namespace 제한
+  destinations:
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  # Cluster Resource 허용 목록
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # Namespace Resource 허용 (모든 Resource 허용)
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
