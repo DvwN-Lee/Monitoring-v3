@@ -6,7 +6,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: default
+  project: monitoring
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: kube-prometheus-stack
@@ -29,8 +29,7 @@ spec:
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
           service:
-            type: NodePort
-            nodePort: 30090
+            type: ClusterIP
 
         # Grafana 설정
         grafana:
@@ -40,8 +39,7 @@ spec:
             userKey: admin-user
             passwordKey: admin-password
           service:
-            type: NodePort
-            nodePort: 30300
+            type: ClusterIP
           persistence:
             enabled: true
             size: 5Gi
@@ -57,8 +55,7 @@ spec:
         alertmanager:
           enabled: true
           service:
-            type: NodePort
-            nodePort: 30093
+            type: ClusterIP
 
         # Node Exporter
         nodeExporter:
