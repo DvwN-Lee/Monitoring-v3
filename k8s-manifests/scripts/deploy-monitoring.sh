@@ -58,7 +58,9 @@ create_monitoring_namespace() {
 # ArgoCD Applications 배포
 deploy_applications() {
     log_info "[3/5] ArgoCD Applications 배포..."
-    # Application YAML 파일만 배포 (kustomization.yaml 제외)
+    # Grafana Secret 먼저 배포 (prometheus-stack에서 참조)
+    kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/grafana-secret.yaml"
+    # Application YAML 파일 배포 (kustomization.yaml 제외)
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/prometheus-app.yaml"
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/loki-app.yaml"
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/promtail-app.yaml"
