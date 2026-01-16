@@ -58,9 +58,13 @@ create_monitoring_namespace() {
 # ArgoCD Applications 배포
 deploy_applications() {
     log_info "[3/5] ArgoCD Applications 배포..."
-    # Grafana Secret 먼저 배포 (prometheus-stack에서 참조)
+    # ArgoCD AppProject 먼저 생성
+    kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/monitoring-project.yaml"
+    # Grafana Secret 배포 (prometheus-stack에서 참조)
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/grafana-secret.yaml"
-    # Application YAML 파일 배포 (kustomization.yaml 제외)
+    # Network Policy 배포
+    kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/network-policy.yaml"
+    # Application YAML 파일 배포
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/prometheus-app.yaml"
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/loki-app.yaml"
     kubectl apply -f "${PROJECT_ROOT}/k8s-manifests/overlays/gcp/monitoring/promtail-app.yaml"
@@ -70,8 +74,18 @@ deploy_applications() {
 wait_for_sync() {
     log_info "[4/5] ArgoCD 동기화 대기 중... (최대 10분)"
 
-    # Application이 생성될 때까지 대기
-    sleep 10
+    # Application이 생성될 때까지 대기 (최대 60초)
+    local max_wait=60
+    local waited=0
+    log_info "Application 생성 대기 중..."
+    until kubectl get application prometheus-stack -n argocd &>/dev/null; do
+        sleep 2
+        waited=$((waited + 2))
+        if [ $waited -ge $max_wait ]; then
+            log_warn "Application 생성 대기 timeout"
+            break
+        fi
+    done
 
     # Prometheus Application 동기화 대기
     if kubectl get application prometheus-stack -n argocd &>/dev/null; then
@@ -83,6 +97,12 @@ wait_for_sync() {
     if kubectl get application loki -n argocd &>/dev/null; then
         kubectl wait --for=jsonpath='{.status.sync.status}'=Synced \
             application/loki -n argocd --timeout=300s || true
+    fi
+
+    # Promtail Application 동기화 대기
+    if kubectl get application promtail -n argocd &>/dev/null; then
+        kubectl wait --for=jsonpath='{.status.sync.status}'=Synced \
+            application/promtail -n argocd --timeout=300s || true
     fi
 }
 
