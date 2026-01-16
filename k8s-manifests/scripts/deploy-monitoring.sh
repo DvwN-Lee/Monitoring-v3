@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Monitoring 스택 자동 배포 스크립트
+# Monitoring Stack 자동 배포 스크립트
 # ArgoCD 설치 후 Monitoring Application 배포
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -108,7 +108,7 @@ check_status() {
 # 메인 실행
 main() {
     echo "========================================"
-    echo "  Monitoring 스택 자동 배포"
+    echo "  Monitoring Stack 자동 배포"
     echo "========================================"
     echo ""
 
