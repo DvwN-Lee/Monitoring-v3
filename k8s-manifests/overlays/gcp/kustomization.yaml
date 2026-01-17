@@ -16,6 +16,8 @@ resources:
   - postgres/pvc.yaml
   - postgres/service.yaml
   - postgres/statefulset.yaml
+  # Network Security
+  - network-policies.yaml
   # Istio resources enabled (gateway.yaml includes VirtualService)
   - istio/gateway.yaml
   - istio/peer-authentication.yaml

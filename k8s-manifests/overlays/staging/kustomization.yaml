@@ -1,0 +1,73 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace for all resources
+namespace: titanium-staging
+
+# Name prefix for all resources
+namePrefix: staging-
+
+# Base resources
+resources:
+  - ../../base
+  - namespace.yaml
+  # PostgreSQL Resources
+  - postgres/configmap.yaml
+  - postgres/pvc.yaml
+  - postgres/service.yaml
+  - postgres/statefulset.yaml
+
+# ConfigMap generator for staging-specific config
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - USE_POSTGRES=true
+      - POSTGRES_HOST=staging-postgresql-service
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=titanium
+      - POSTGRES_SSLMODE=disable
+      - API_GATEWAY_URL=http://staging-api-gateway-service:8000
+      - USER_SERVICE_URL=http://staging-user-service:8001
+      - AUTH_SERVICE_URL=http://staging-auth-service:8002
+      - BLOG_SERVICE_URL=http://staging-blog-service:8005
+      - REDIS_HOST=staging-redis-service
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - ENVIRONMENT=staging
+      - LOG_LEVEL=DEBUG
+      - DEBUG_MODE=true
+      - APP_NAME=titanium
+      - APP_VERSION=2.0.0-staging
+      - ALLOWED_ORIGINS=*
+
+# Common labels for all resources
+labels:
+  - pairs:
+      environment: staging
+      managed-by: kustomize
+      project: titanium
+
+# Images to use (same as production for testing)
+images:
+  - name: dongju101/user-service
+    newTag: main-9cb623f
+  - name: dongju101/blog-service
+    newTag: main-8701de4
+  - name: dongju101/auth-service
+    newTag: main-9cb623f
+  - name: dongju101/api-gateway
+    newTag: main-9cb623f
+
+# Resource modifications - single replica for staging
+replicas:
+  - name: user-service-deployment
+    count: 1
+  - name: blog-service-deployment
+    count: 1
+  - name: auth-service-deployment
+    count: 1
+  - name: api-gateway-deployment
+    count: 1
+  - name: redis-deployment
+    count: 1
