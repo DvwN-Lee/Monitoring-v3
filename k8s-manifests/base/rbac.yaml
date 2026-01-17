@@ -1,0 +1,57 @@
+# RBAC Configuration for Titanium Microservices
+# 최소 권한 원칙(Principle of Least Privilege) 적용
+---
+# ServiceAccounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-gateway-sa
+  labels:
+    app: api-gateway
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auth-service-sa
+  labels:
+    app: auth-service
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: user-service-sa
+  labels:
+    app: user-service
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blog-service-sa
+  labels:
+    app: blog-service
+---
+# Role for api-gateway (Service Discovery)
+# api-gateway는 다른 서비스 검색을 위해 services 조회 권한 필요
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-gateway-role
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+# RoleBinding for api-gateway
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-gateway-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: api-gateway-sa
+roleRef:
+  kind: Role
+  name: api-gateway-role
+  apiGroup: rbac.authorization.k8s.io
+# auth-service, user-service, blog-service는 K8s API 접근이 불필요하므로
+# ServiceAccount만 생성하고 Role/RoleBinding은 생략
