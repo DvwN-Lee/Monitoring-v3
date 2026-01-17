@@ -5,6 +5,7 @@ metadata:
   name: titanium-base
 
 resources:
+- rbac.yaml
 - api-gateway-deployment.yaml
 - api-gateway-service.yaml
 - auth-service-deployment.yaml
@@ -13,7 +14,6 @@ resources:
 - redis-service.yaml
 - user-service-deployment.yaml
 - user-service-service.yaml
-  # analytics-service 제거됨
 - blog-service-deployment.yaml
 - blog-service-service.yaml
 - configmap.yaml
