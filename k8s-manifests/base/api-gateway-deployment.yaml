@@ -48,7 +48,7 @@ spec:
           httpGet:
             path: /health
             port: http
-          initialDelaySeconds: 5
+          initialDelaySeconds: 15
           periodSeconds: 5
         startupProbe:
           httpGet:
