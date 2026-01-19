@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 // Environment variables with defaults
-const CLUSTER_IP = process.env.CLUSTER_IP || '34.47.68.205';
+const CLUSTER_IP = process.env.CLUSTER_IP || '34.50.8.19';
 const GRAFANA_PORT = process.env.GRAFANA_PORT || '31300';
 const PROMETHEUS_PORT = process.env.PROMETHEUS_PORT || '31090';
-const KIALI_PORT = process.env.KIALI_PORT || '20001';
+const KIALI_PORT = process.env.KIALI_PORT || '31200';
 const GRAFANA_ADMIN_PASSWORD = process.env.GRAFANA_ADMIN_PASSWORD || 'admin';
 
 const GRAFANA_URL = `http://${CLUSTER_IP}:${GRAFANA_PORT}`;
