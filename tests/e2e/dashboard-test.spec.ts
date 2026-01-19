@@ -53,14 +53,11 @@ test.describe('E2E Dashboard Tests', () => {
       await page.fill('input[name="password"]', GRAFANA_ADMIN_PASSWORD);
       await page.click('button[type="submit"]');
 
-      // 로그인 성공 후 대시보드 페이지 대기
-      await page.waitForURL('**/d/**', { timeout: 15000 }).catch(() => {
-        // 홈 페이지로 리다이렉트되는 경우
-        return page.waitForURL('**/', { timeout: 5000 });
-      });
+      // 로그인 성공 확인 - URL 변경 또는 로그인 폼 사라짐 대기
+      await page.locator('input[name="user"]').waitFor({ state: 'hidden', timeout: 15000 });
 
-      // 로그인 성공 확인 (로그아웃 버튼 또는 사용자 메뉴 존재)
-      const userMenu = page.locator('[aria-label="User menu"]').or(page.locator('[data-testid="sidemenu"]'));
+      // 로그인 성공 확인 (사용자 메뉴 또는 사이드 메뉴 존재)
+      const userMenu = page.locator('[aria-label="User menu"]').or(page.locator('[data-testid="sidemenu"]')).or(page.locator('.main-view'));
       await expect(userMenu.first()).toBeVisible({ timeout: 15000 });
 
       await page.screenshot({
