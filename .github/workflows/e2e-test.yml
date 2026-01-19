@@ -22,6 +22,7 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
   TF_VAR_postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
   TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+  ADMIN_IP: ${{ secrets.ADMIN_IP }}
   CLUSTER_IP: '34.47.68.205'
   GRAFANA_URL: 'http://34.47.68.205:31300'
   PROMETHEUS_URL: 'http://34.47.68.205:31090'
@@ -65,8 +66,9 @@ jobs:
         env:
           RUNNER_IP: ${{ steps.get-ip.outputs.ip }}
         run: |
+          # ADMIN_IP와 RUNNER_IP를 모두 포함하여 방화벽 규칙 업데이트
           terraform apply -auto-approve \
-            -var="additional_admin_cidrs=[\"${RUNNER_IP}/32\"]" \
+            -var="additional_admin_cidrs=[\"${ADMIN_IP}/32\",\"${RUNNER_IP}/32\"]" \
             -target=google_compute_firewall.allow_k8s_api \
             -target=google_compute_firewall.allow_dashboards \
             -target=google_compute_firewall.allow_ssh
@@ -240,9 +242,10 @@ jobs:
       - name: Remove Runner IP from Firewall Rules
         working-directory: terraform/environments/gcp
         run: |
+          # Runner IP 제거, ADMIN_IP는 유지
           terraform apply -auto-approve \
-            -var="additional_admin_cidrs=[]" \
+            -var="additional_admin_cidrs=[\"${ADMIN_IP}/32\"]" \
             -target=google_compute_firewall.allow_k8s_api \
             -target=google_compute_firewall.allow_dashboards \
             -target=google_compute_firewall.allow_ssh
-          echo "Temporary IP access removed"
+          echo "Runner IP removed, admin IP preserved"
