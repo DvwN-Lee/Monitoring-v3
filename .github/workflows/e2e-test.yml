@@ -23,10 +23,10 @@ env:
   TF_VAR_postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
   TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
   ADMIN_IP: ${{ secrets.ADMIN_IP }}
-  CLUSTER_IP: '34.47.68.205'
-  GRAFANA_URL: 'http://34.47.68.205:31300'
-  PROMETHEUS_URL: 'http://34.47.68.205:31090'
-  KIALI_URL: 'http://34.47.68.205:20001'
+  CLUSTER_IP: '34.50.8.19'
+  GRAFANA_URL: 'http://34.50.8.19:31300'
+  PROMETHEUS_URL: 'http://34.50.8.19:31090'
+  KIALI_URL: 'http://34.50.8.19:31200'
   NAMESPACE: 'titanium-prod'
 
 jobs:
