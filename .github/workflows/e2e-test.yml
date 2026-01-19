@@ -1,0 +1,248 @@
+name: E2E Cloud Environment Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      cleanup_ip:
+        description: '테스트 완료 후 임시 IP 규칙 정리 여부'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  schedule:
+    - cron: '0 9 * * 1'  # 매주 월요일 09:00 UTC (한국시간 18:00)
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+  TF_VAR_postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+  TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+  CLUSTER_IP: '34.47.68.205'
+  GRAFANA_URL: 'http://34.47.68.205:31300'
+  PROMETHEUS_URL: 'http://34.47.68.205:31090'
+  KIALI_URL: 'http://34.47.68.205:20001'
+  NAMESPACE: 'titanium-prod'
+
+jobs:
+  setup-access:
+    name: Setup Network Access
+    runs-on: ubuntu-latest
+    outputs:
+      runner_ip: ${{ steps.get-ip.outputs.ip }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Runner Public IP
+        id: get-ip
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "ip=${RUNNER_IP}" >> $GITHUB_OUTPUT
+          echo "Runner IP: ${RUNNER_IP}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: terraform/environments/gcp
+        run: terraform init
+
+      - name: Update Firewall Rules with Runner IP
+        working-directory: terraform/environments/gcp
+        env:
+          RUNNER_IP: ${{ steps.get-ip.outputs.ip }}
+        run: |
+          terraform apply -auto-approve \
+            -var="additional_admin_cidrs=[\"${RUNNER_IP}/32\"]" \
+            -target=google_compute_firewall.allow_k8s_api \
+            -target=google_compute_firewall.allow_dashboards \
+            -target=google_compute_firewall.allow_ssh
+
+      - name: Verify Network Access
+        run: |
+          echo "Testing connectivity to cluster..."
+          for i in {1..5}; do
+            if curl -s --connect-timeout 10 "http://${CLUSTER_IP}:31090/-/healthy" | grep -q "Healthy"; then
+              echo "Cluster is accessible"
+              exit 0
+            fi
+            echo "Attempt $i failed, waiting 10 seconds..."
+            sleep 10
+          done
+          echo "Failed to connect to cluster after 5 attempts"
+          exit 1
+
+  api-test:
+    name: API E2E Tests
+    needs: setup-access
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run API Tests
+        id: api-tests
+        run: |
+          chmod +x tests/e2e/cloud-test.sh
+          ./tests/e2e/cloud-test.sh | tee api-test-results.txt
+
+      - name: Upload API Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-test-results
+          path: api-test-results.txt
+
+  browser-test:
+    name: Browser E2E Tests
+    needs: [setup-access, api-test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Run Playwright Tests
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          npx playwright test tests/e2e/dashboard-test.spec.ts --reporter=html
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+      - name: Upload Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: tests/e2e/screenshots/
+
+  generate-report:
+    name: Generate Test Report
+    needs: [api-test, browser-test]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download API Test Results
+        uses: actions/download-artifact@v4
+        with:
+          name: api-test-results
+          path: ./results/
+        continue-on-error: true
+
+      - name: Download Screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: ./results/screenshots/
+        continue-on-error: true
+
+      - name: Generate Summary Report
+        env:
+          API_TEST_RESULT: ${{ needs.api-test.result }}
+          BROWSER_TEST_RESULT: ${{ needs.browser-test.result }}
+        run: |
+          mkdir -p ./results
+          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          cat > ./results/summary.md << EOF
+          # E2E Test Report
+
+          **Date**: ${TIMESTAMP}
+          **Cluster IP**: ${CLUSTER_IP}
+          **Namespace**: ${NAMESPACE}
+
+          ## Test Results
+
+          ### API Tests
+          - Status: ${API_TEST_RESULT}
+
+          ### Browser Tests
+          - Status: ${BROWSER_TEST_RESULT}
+
+          ## Environment
+
+          | Service | URL |
+          |---------|-----|
+          | Grafana | ${GRAFANA_URL} |
+          | Prometheus | ${PROMETHEUS_URL} |
+          | Kiali | ${KIALI_URL} |
+
+          ## Artifacts
+
+          - API Test Results: api-test-results.txt
+          - Playwright Report: playwright-report/
+          - Screenshots: e2e-screenshots/
+          EOF
+
+      - name: Upload Summary Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: ./results/
+
+  cleanup:
+    name: Cleanup Temporary Access
+    needs: [setup-access, api-test, browser-test, generate-report]
+    runs-on: ubuntu-latest
+    if: always() && inputs.cleanup_ip == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: terraform/environments/gcp
+        run: terraform init
+
+      - name: Remove Runner IP from Firewall Rules
+        working-directory: terraform/environments/gcp
+        run: |
+          terraform apply -auto-approve \
+            -var="additional_admin_cidrs=[]" \
+            -target=google_compute_firewall.allow_k8s_api \
+            -target=google_compute_firewall.allow_dashboards \
+            -target=google_compute_firewall.allow_ssh
+          echo "Temporary IP access removed"
