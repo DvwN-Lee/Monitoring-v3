@@ -96,6 +96,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Runner Public IP
+        id: get-ip
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "ip=${RUNNER_IP}" >> $GITHUB_OUTPUT
+          echo "API Test Runner IP: ${RUNNER_IP}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: terraform/environments/gcp
+        run: terraform init
+
+      - name: Add Runner IP to Firewall
+        working-directory: terraform/environments/gcp
+        env:
+          RUNNER_IP: ${{ steps.get-ip.outputs.ip }}
+          SETUP_RUNNER_IP: ${{ needs.setup-access.outputs.runner_ip }}
+        run: |
+          terraform apply -auto-approve \
+            -var="additional_admin_cidrs=[\"${ADMIN_IP}/32\",\"${SETUP_RUNNER_IP}/32\",\"${RUNNER_IP}/32\"]" \
+            -target=google_compute_firewall.allow_k8s_api \
+            -target=google_compute_firewall.allow_dashboards \
+            -target=google_compute_firewall.allow_ssh
+
       - name: Run API Tests
         id: api-tests
         run: |
@@ -117,6 +150,39 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get Runner Public IP
+        id: get-ip
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "ip=${RUNNER_IP}" >> $GITHUB_OUTPUT
+          echo "Browser Test Runner IP: ${RUNNER_IP}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: terraform/environments/gcp
+        run: terraform init
+
+      - name: Add Runner IP to Firewall
+        working-directory: terraform/environments/gcp
+        env:
+          RUNNER_IP: ${{ steps.get-ip.outputs.ip }}
+          SETUP_RUNNER_IP: ${{ needs.setup-access.outputs.runner_ip }}
+        run: |
+          terraform apply -auto-approve \
+            -var="additional_admin_cidrs=[\"${ADMIN_IP}/32\",\"${SETUP_RUNNER_IP}/32\",\"${RUNNER_IP}/32\"]" \
+            -target=google_compute_firewall.allow_k8s_api \
+            -target=google_compute_firewall.allow_dashboards \
+            -target=google_compute_firewall.allow_ssh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
