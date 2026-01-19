@@ -18,7 +18,7 @@ test.describe('E2E Dashboard Tests', () => {
   test.describe('Grafana Tests', () => {
 
     test('Grafana 로그인 페이지 접근', async ({ page }) => {
-      await page.goto(`${GRAFANA_URL}/login`);
+      await page.goto(`${GRAFANA_URL}/login`, { waitUntil: 'domcontentloaded' });
 
       // 로그인 폼 요소가 나타날 때까지 대기 (SPA 렌더링 완료 확인)
       const usernameInput = page.locator('input[name="user"]');
@@ -43,7 +43,7 @@ test.describe('E2E Dashboard Tests', () => {
     });
 
     test('Grafana 로그인 및 대시보드 접근', async ({ page }) => {
-      await page.goto(`${GRAFANA_URL}/login`);
+      await page.goto(`${GRAFANA_URL}/login`, { waitUntil: 'domcontentloaded' });
 
       // 로그인 폼이 나타날 때까지 대기
       await page.locator('input[name="user"]').waitFor({ state: 'visible', timeout: 15000 });
@@ -94,9 +94,7 @@ test.describe('E2E Dashboard Tests', () => {
   test.describe('Prometheus Tests', () => {
 
     test('Prometheus Targets 페이지 접근', async ({ page }) => {
-      await page.goto(`${PROMETHEUS_URL}/targets`);
-      // Prometheus는 지속적 polling으로 networkidle 대신 domcontentloaded 사용
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto(`${PROMETHEUS_URL}/targets`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
 
       // Prometheus 페이지 확인
@@ -154,10 +152,7 @@ test.describe('E2E Dashboard Tests', () => {
   test.describe('Kiali Tests', () => {
 
     test('Kiali 메인 페이지 접근', async ({ page }) => {
-      await page.goto(KIALI_URL);
-
-      // Kiali 페이지 로드 대기 (body 또는 특정 요소)
-      await page.waitForSelector('body', { timeout: 15000 });
+      await page.goto(KIALI_URL, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000); // SPA 렌더링 대기
 
       // Kiali 페이지 확인
@@ -174,10 +169,7 @@ test.describe('E2E Dashboard Tests', () => {
 
     test('Kiali Service Graph 페이지 접근', async ({ page }) => {
       // Kiali Graph 페이지로 직접 이동
-      await page.goto(`${KIALI_URL}/console/graph/namespaces/?namespaces=titanium-prod`);
-
-      // 페이지 로드 및 Graph 렌더링 대기
-      await page.waitForSelector('body', { timeout: 15000 });
+      await page.goto(`${KIALI_URL}/console/graph/namespaces/?namespaces=titanium-prod`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(3000); // Graph 렌더링 대기
 
       await page.screenshot({
