@@ -19,7 +19,7 @@ test.describe('E2E Dashboard Tests', () => {
 
     test('Grafana 로그인 페이지 접근', async ({ page }) => {
       await page.goto(`${GRAFANA_URL}/login`);
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('load');
 
       // Grafana 로그인 페이지 확인
       const title = await page.title();
@@ -42,7 +42,7 @@ test.describe('E2E Dashboard Tests', () => {
 
     test('Grafana 로그인 및 대시보드 접근', async ({ page }) => {
       await page.goto(`${GRAFANA_URL}/login`);
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('load');
 
       // 로그인 수행
       await page.fill('input[name="user"]', 'admin');
@@ -55,7 +55,7 @@ test.describe('E2E Dashboard Tests', () => {
         return page.waitForURL('**/', { timeout: 5000 });
       });
 
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('load');
 
       // 로그인 성공 확인 (로그아웃 버튼 또는 사용자 메뉴 존재)
       const userMenu = page.locator('[aria-label="User menu"]').or(page.locator('[data-testid="sidemenu"]'));
@@ -153,7 +153,7 @@ test.describe('E2E Dashboard Tests', () => {
 
     test('Kiali 메인 페이지 접근', async ({ page }) => {
       await page.goto(KIALI_URL);
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('load');
 
       // Kiali 페이지 확인
       const title = await page.title();
@@ -170,7 +170,7 @@ test.describe('E2E Dashboard Tests', () => {
     test('Kiali Service Graph 페이지 접근', async ({ page }) => {
       // Kiali Graph 페이지로 직접 이동
       await page.goto(`${KIALI_URL}/console/graph/namespaces/?namespaces=titanium-prod`);
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('load');
       await page.waitForTimeout(2000); // Graph 렌더링 대기
 
       await page.screenshot({
