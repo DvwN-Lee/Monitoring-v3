@@ -194,6 +194,31 @@ jobs:
           npm ci
           npx playwright install chromium --with-deps
 
+      - name: Diagnose Cluster Services
+        run: |
+          echo "=== Service Port Connectivity Check ==="
+          for port in 31090 31200 31300; do
+            echo -n "Port $port: "
+            if nc -zv -w5 ${CLUSTER_IP} $port 2>&1; then
+              echo "OPEN"
+            else
+              echo "CLOSED or UNREACHABLE"
+            fi
+          done
+
+          echo ""
+          echo "=== Service HTTP Response Check ==="
+          echo "Prometheus (31090):"
+          curl -sv --connect-timeout 5 http://${CLUSTER_IP}:31090/-/healthy 2>&1 | head -15 || true
+
+          echo ""
+          echo "Kiali (31200):"
+          curl -sv --connect-timeout 5 http://${CLUSTER_IP}:31200/api/status 2>&1 | head -15 || true
+
+          echo ""
+          echo "Grafana (31300):"
+          curl -sv --connect-timeout 5 http://${CLUSTER_IP}:31300/api/health 2>&1 | head -15 || true
+
       - name: Run Playwright Tests
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
