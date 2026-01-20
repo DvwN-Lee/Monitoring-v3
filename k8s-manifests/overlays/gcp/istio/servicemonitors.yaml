@@ -32,7 +32,7 @@ spec:
     - key: app
       operator: Exists
   podMetricsEndpoints:
-  - port: http-envoy-prom
+  - targetPort: 15090
     interval: 30s
     path: /stats/prometheus
     relabelings:
