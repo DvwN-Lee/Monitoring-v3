@@ -174,7 +174,7 @@ ArgoCD를 통해 자동으로 배포되는 applications:
 
 1. **titanium-prod**: Main application stack
    - Source: https://github.com/DvwN-Lee/Monitoring-v2.git
-   - Path: k8s-manifests/overlays/solid-cloud
+   - Path: k8s-manifests/overlays/gcp
    - Auto-sync: enabled
 
 2. **loki-stack**: Logging and monitoring
