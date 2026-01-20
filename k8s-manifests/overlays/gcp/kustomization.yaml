@@ -64,7 +64,12 @@ patches:
           metadata:
             annotations:
               # Istio sidecar 초기화 완료 후 Application 시작 (Issue #60)
-              proxy.istio.io/config: '{"holdApplicationUntilProxyStarts": true}'
+              # CSR 서명 실패 시 graceful shutdown 지원 (Issue #68)
+              proxy.istio.io/config: |
+                holdApplicationUntilProxyStarts: true
+                terminationDrainDuration: 30s
+                proxyMetadata:
+                  EXIT_ON_ZERO_ACTIVE_CONNECTIONS: "true"
               sidecar.istio.io/proxyCPU: "50m"
               sidecar.istio.io/proxyCPULimit: "200m"
               sidecar.istio.io/proxyMemory: "64Mi"
