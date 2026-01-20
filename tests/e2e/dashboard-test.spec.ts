@@ -152,7 +152,7 @@ test.describe('E2E Dashboard Tests', () => {
     // Kiali 서비스 접근 가능 여부 확인
     test.beforeAll(async ({ request }) => {
       try {
-        const response = await request.get(`${KIALI_URL}/api/status`, { timeout: 10000 });
+        const response = await request.get(`${KIALI_URL}/kiali/api/status`, { timeout: 10000 });
         if (!response.ok()) {
           console.log(`Kiali service not available (HTTP ${response.status()})`);
           kialiAvailable = false;
@@ -166,7 +166,7 @@ test.describe('E2E Dashboard Tests', () => {
     test('Kiali 메인 페이지 접근', async ({ page }) => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
-      await page.goto(KIALI_URL, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${KIALI_URL}/kiali/`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000); // SPA 렌더링 대기
 
       // Kiali 페이지 확인
@@ -185,7 +185,7 @@ test.describe('E2E Dashboard Tests', () => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
       // Kiali Graph 페이지로 직접 이동
-      await page.goto(`${KIALI_URL}/console/graph/namespaces/?namespaces=titanium-prod`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${KIALI_URL}/kiali/console/graph/namespaces/?namespaces=titanium-prod`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(3000); // Graph 렌더링 대기
 
       await page.screenshot({
@@ -199,7 +199,7 @@ test.describe('E2E Dashboard Tests', () => {
     test('Kiali Status API 검증', async ({ request }) => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
-      const response = await request.get(`${KIALI_URL}/api/status`);
+      const response = await request.get(`${KIALI_URL}/kiali/api/status`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -211,7 +211,7 @@ test.describe('E2E Dashboard Tests', () => {
     test('Kiali Namespaces API 검증', async ({ request }) => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
-      const response = await request.get(`${KIALI_URL}/api/namespaces`);
+      const response = await request.get(`${KIALI_URL}/kiali/api/namespaces`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -227,7 +227,7 @@ test.describe('E2E Dashboard Tests', () => {
     test('Kiali Istio Config API 검증', async ({ request }) => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
-      const response = await request.get(`${KIALI_URL}/api/istio/config`);
+      const response = await request.get(`${KIALI_URL}/kiali/api/istio/config`);
       expect(response.ok()).toBeTruthy();
 
       console.log('Kiali Istio Config API: OK');
@@ -257,7 +257,7 @@ test.describe('E2E Dashboard Tests', () => {
 
       // Kiali 상태 확인 (실패해도 테스트는 통과)
       try {
-        const kialiResponse = await request.get(`${KIALI_URL}/api/status`, { timeout: 10000 });
+        const kialiResponse = await request.get(`${KIALI_URL}/kiali/api/status`, { timeout: 10000 });
         results.push({
           name: 'Kiali',
           status: kialiResponse.status(),
@@ -301,7 +301,7 @@ test.describe('E2E Dashboard Tests', () => {
       // Kiali 접근 가능 여부 확인 후 skip 처리
       let kialiAvailable = true;
       try {
-        const statusResponse = await request.get(`${KIALI_URL}/api/status`, { timeout: 10000 });
+        const statusResponse = await request.get(`${KIALI_URL}/kiali/api/status`, { timeout: 10000 });
         kialiAvailable = statusResponse.ok();
       } catch {
         kialiAvailable = false;
@@ -310,7 +310,7 @@ test.describe('E2E Dashboard Tests', () => {
       test.skip(!kialiAvailable, 'Kiali service is not available');
 
       // Kiali에서 Istio 설정 확인
-      const kialiResponse = await request.get(`${KIALI_URL}/api/istio/config`);
+      const kialiResponse = await request.get(`${KIALI_URL}/kiali/api/istio/config`);
       expect(kialiResponse.ok()).toBeTruthy();
 
       console.log('Kiali-Istio 연동 확인 완료');
