@@ -58,6 +58,19 @@ spec:
       ports:
         - protocol: TCP
           port: 8005
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회 허용
     - to:
         - namespaceSelector: {}
@@ -115,6 +128,19 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회 허용
     - to:
         - namespaceSelector: {}
@@ -175,6 +201,19 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회 허용
     - to:
         - namespaceSelector: {}
@@ -224,6 +263,19 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회 허용
     - to:
         - namespaceSelector: {}
@@ -260,6 +312,19 @@ spec:
         - protocol: TCP
           port: 6379
   egress:
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회만 허용
     - to:
         - namespaceSelector: {}
@@ -296,6 +361,19 @@ spec:
         - protocol: TCP
           port: 5432
   egress:
+    # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15010
     # DNS 조회만 허용
     - to:
         - namespaceSelector: {}
