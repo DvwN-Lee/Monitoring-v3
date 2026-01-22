@@ -82,7 +82,7 @@ spec:
           port: 53
 ---
 # auth-service NetworkPolicy
-# - Ingress: api-gateway에서만 수신
+# - Ingress: api-gateway, blog-service에서 수신
 # - Egress: user-service, Redis로 송신
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -100,6 +100,9 @@ spec:
         - podSelector:
             matchLabels:
               app: api-gateway
+        - podSelector:
+            matchLabels:
+              app: blog-service
       ports:
         - protocol: TCP
           port: 8002
@@ -226,7 +229,7 @@ spec:
 ---
 # blog-service NetworkPolicy
 # - Ingress: api-gateway에서만 수신
-# - Egress: PostgreSQL로 송신
+# - Egress: PostgreSQL, auth-service로 송신
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -263,6 +266,14 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    # auth-service로 송신 (JWT 토큰 검증)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-service
+      ports:
+        - protocol: TCP
+          port: 8002
     # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
     - to:
         - namespaceSelector:
