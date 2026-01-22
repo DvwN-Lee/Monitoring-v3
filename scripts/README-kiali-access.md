@@ -27,7 +27,7 @@
 
 ---
 
-### 2. kiali-connect-advanced.sh (고급 버전) ⭐ 추천
+### 2. kiali-connect-advanced.sh (고급 버전) - 추천
 
 **특징**:
 - IP 사용 이력 추적 (~/.kiali-ip-history)
@@ -80,7 +80,7 @@ $ ./scripts/kiali-connect.sh
 현재 IP: 14.35.115.202
 방화벽 규칙 확인 중...
 현재 IP를 방화벽 규칙에 추가 중...
-✓ 방화벽 규칙 업데이트 완료
+[OK] 방화벽 규칙 업데이트 완료
 
 === Kiali 접속 정보 ===
 URL: http://34.50.8.19:31200/kiali
@@ -100,7 +100,7 @@ $ ./scripts/kiali-connect-advanced.sh
 방화벽 규칙 업데이트 중...
 이전: 112.218.39.251/32,64.236.160.193/32,14.35.115.100/32
 이후: 112.218.39.251/32,14.35.115.202/32
-✓ 방화벽 규칙 업데이트 완료
+[OK] 방화벽 규칙 업데이트 완료
 
 === Kiali 접속 정보 ===
 URL: http://34.50.8.19:31200/kiali
@@ -131,48 +131,57 @@ source ~/.bashrc  # 또는 source ~/.zshrc
 kiali
 ```
 
-## 설정 커스터마이징
+## 환경 변수를 통한 설정 커스터마이징
 
-스크립트 상단의 변수를 수정하여 설정을 변경할 수 있습니다.
+스크립트는 환경 변수를 통해 설정을 변경할 수 있습니다.
 
-### kiali-connect-advanced.sh 설정
+### 지원하는 환경 변수
+
+| 환경 변수 | 기본값 | 설명 |
+|-----------|--------|------|
+| `GCP_PROJECT_ID` | `titanium-k3s-1765951764` | GCP 프로젝트 ID |
+| `KIALI_FIREWALL_RULE` | `titanium-k3s-allow-dashboards` | 방화벽 규칙 이름 |
+| `KIALI_MASTER_IP` | `34.50.8.19` | Kubernetes Master Node IP |
+| `KIALI_PORT` | `31200` | Kiali NodePort |
+| `KIALI_BASE_IP` | (없음) | 항상 유지할 고정 IP (CIDR 형식) |
+| `KIALI_MAX_IPS` | `10` | 최대 허용 IP 개수 (고급 버전만) |
+
+### 사용 예시
 
 ```bash
-# 프로젝트 ID
-PROJECT_ID="titanium-k3s-1765951764"
+# 환경 변수로 설정 오버라이드
+export KIALI_BASE_IP="112.218.39.251/32"
+export KIALI_MAX_IPS=5
+./scripts/kiali-connect-advanced.sh
 
-# 방화벽 규칙 이름
-FIREWALL_RULE="titanium-k3s-allow-dashboards"
+# 또는 한 줄로 실행
+KIALI_BASE_IP="112.218.39.251/32" ./scripts/kiali-connect-advanced.sh
+```
 
-# Kiali 접속 정보
-MASTER_IP="34.50.8.19"
-KIALI_PORT="31200"
+### 영구 설정 (선택)
 
-# 항상 유지할 고정 IP (쉼표로 구분)
-BASE_ALLOWED_IP="112.218.39.251/32"
-
-# 최대 허용 IP 개수 (기본: 10)
-MAX_ALLOWED_IPS=10
-
-# IP 기록 파일 경로
-IP_HISTORY_FILE="${HOME}/.kiali-ip-history"
+```bash
+# ~/.bashrc 또는 ~/.zshrc에 추가
+export KIALI_BASE_IP="YOUR_STATIC_IP/32"
+export GCP_PROJECT_ID="your-project-id"
 ```
 
 ## 문제 해결
 
 ### 1. "현재 IP를 확인할 수 없습니다" 오류
 
-**원인**: 인터넷 연결 문제 또는 ifconfig.me 서비스 장애
+**원인**: 인터넷 연결 문제 또는 모든 IP 확인 서비스 장애
 
 **해결**:
 ```bash
-# 수동으로 IP 확인
+# 수동으로 IP 확인 (여러 서비스 시도)
 curl ifconfig.me
 curl icanhazip.com
-
-# 스크립트 수정 (다른 서비스 사용)
-# CURRENT_IP=$(curl -s icanhazip.com)
+curl ipinfo.io/ip
+curl api.ipify.org
 ```
+
+스크립트는 자동으로 4개의 서비스를 순차적으로 시도합니다.
 
 ### 2. 권한 오류
 
@@ -230,9 +239,9 @@ gcloud iam roles create KialiFirewallManager \
 
 고급 버전은 최대 10개 IP만 유지하여 방화벽 규칙 비대화 방지
 
-### 3. BASE_ALLOWED_IP 관리
+### 3. 환경 변수를 통한 설정
 
-고정 IP가 있다면 `BASE_ALLOWED_IP`에 추가하여 항상 접속 가능하도록 설정
+민감한 IP 정보는 스크립트에 하드코딩하지 않고 환경 변수로 관리
 
 ### 4. 로그 확인
 

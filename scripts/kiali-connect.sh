@@ -2,44 +2,75 @@
 
 set -e
 
-PROJECT_ID="titanium-k3s-1765951764"
-FIREWALL_RULE="titanium-k3s-allow-dashboards"
-MASTER_IP="34.50.8.19"
-KIALI_PORT="31200"
-BASE_ALLOWED_IP="112.218.39.251/32"
+# 설정 (환경 변수로 오버라이드 가능)
+PROJECT_ID="${GCP_PROJECT_ID:-titanium-k3s-1765951764}"
+FIREWALL_RULE="${KIALI_FIREWALL_RULE:-titanium-k3s-allow-dashboards}"
+MASTER_IP="${KIALI_MASTER_IP:-34.50.8.19}"
+KIALI_PORT="${KIALI_PORT:-31200}"
+BASE_ALLOWED_IP="${KIALI_BASE_IP:-}"
+
+# IP 확인 함수 (fallback 지원)
+get_current_ip() {
+    local ip=""
+    local services=("ifconfig.me" "icanhazip.com" "ipinfo.io/ip" "api.ipify.org")
+
+    for service in "${services[@]}"; do
+        ip=$(curl -s --connect-timeout 5 "$service" 2>/dev/null)
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$ip"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# IP 형식 검증 함수
+validate_ip() {
+    local ip="$1"
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 0
+    fi
+    return 1
+}
 
 echo "=== Kiali 자동 접속 스크립트 ==="
 
 # 1. 현재 IP 확인
 echo "현재 IP 확인 중..."
-CURRENT_IP=$(curl -s ifconfig.me)
+CURRENT_IP=$(get_current_ip)
 if [ -z "$CURRENT_IP" ]; then
     echo "ERROR: 현재 IP를 확인할 수 없습니다."
+    echo "네트워크 연결을 확인하세요."
+    exit 1
+fi
+
+if ! validate_ip "$CURRENT_IP"; then
+    echo "ERROR: 유효하지 않은 IP 형식: $CURRENT_IP"
     exit 1
 fi
 echo "현재 IP: $CURRENT_IP"
 
 # 2. 현재 방화벽 규칙 확인
 echo "방화벽 규칙 확인 중..."
-CURRENT_RANGES=$(gcloud compute firewall-rules describe $FIREWALL_RULE \
-    --project=$PROJECT_ID \
+CURRENT_RANGES=$(gcloud compute firewall-rules describe "$FIREWALL_RULE" \
+    --project="$PROJECT_ID" \
     --format="value(sourceRanges)")
 
 # 3. 현재 IP가 이미 허용되어 있는지 확인
 if echo "$CURRENT_RANGES" | grep -q "$CURRENT_IP"; then
-    echo "✓ 현재 IP($CURRENT_IP)가 이미 허용되어 있습니다."
+    echo "[OK] 현재 IP($CURRENT_IP)가 이미 허용되어 있습니다."
 else
     echo "현재 IP를 방화벽 규칙에 추가 중..."
 
     # 기존 IP 목록에 현재 IP 추가
     NEW_RANGES="${CURRENT_RANGES},${CURRENT_IP}/32"
 
-    gcloud compute firewall-rules update $FIREWALL_RULE \
-        --project=$PROJECT_ID \
+    gcloud compute firewall-rules update "$FIREWALL_RULE" \
+        --project="$PROJECT_ID" \
         --source-ranges="$NEW_RANGES" \
         --quiet
 
-    echo "✓ 방화벽 규칙 업데이트 완료"
+    echo "[OK] 방화벽 규칙 업데이트 완료"
 fi
 
 # 4. Kiali URL 출력 및 브라우저 열기
