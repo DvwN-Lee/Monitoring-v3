@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kiali
+  namespace: istio-system
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 20001
+      protocol: TCP
+      targetPort: 20001
+      nodePort: 31200
