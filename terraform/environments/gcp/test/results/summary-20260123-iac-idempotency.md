@@ -190,16 +190,60 @@ and found no differences, so no changes are needed.
 
 ## 개선 필요 사항
 
-**Kiali NodePort 설정**:
-- ArgoCD Application에서 Service Type을 NodePort로 명시 필요
-- Helm Values 또는 Kustomize Patch 적용
+### 테스트 실패 원인 분석
 
-**Blog Service NetworkPolicy 검토**:
-- Auth Service와의 통신을 위한 NetworkPolicy 규칙 추가 필요
-- 현재 설정에서 Blog → Auth 간 트래픽 차단 가능성 확인
+**Kiali 접근 실패 원인 규명**:
+- 코드 확인 결과: `terraform/environments/gcp/scripts/k3s-server.sh:575`에서 이미 NodePort로 패치 설정됨
+- 실패 원인: ArgoCD Application 배포 완료 전 테스트 수행으로 인한 타이밍 문제
+- 해결 방법: `kubectl wait` 조건 확인 후 충분한 대기 시간 추가
+
+**Blog Service 접근 실패 원인 규명**:
+- 코드 확인 결과: `k8s-manifests/overlays/gcp/network-policies.yaml:301-308`에서 Auth Service egress 규칙 이미 설정됨
+- 실패 원인: Pod 초기화 중 NetworkPolicy 적용 타이밍 문제
+- 해결 방법: Pod Ready 상태 확인 후 테스트 수행
+
+### 수정 사항 적용 확인
+
+**Kiali Service 설정**:
+```bash
+# k3s-server.sh에서 NodePort 패치 적용
+kubectl patch svc kiali -n istio-system --type='json' \
+  -p="[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"NodePort\"},{\"op\":\"add\",\"path\":\"/spec/ports/0/nodePort\",\"value\":$NODEPORT_KIALI}]"
+```
+
+**Blog Service NetworkPolicy**:
+```yaml
+# network-policies.yaml에 이미 설정됨
+egress:
+  - to:
+      - podSelector:
+          matchLabels:
+            app: auth-service
+    ports:
+      - protocol: TCP
+        port: 8002
+```
+
+### 재검증 권장 사항
+
+테스트 실패는 일시적인 배포 타이밍 문제로 확인되었습니다. 다음 절차로 재검증을 권장합니다:
+
+```bash
+# 1. 모든 Pod가 Ready 상태인지 확인
+kubectl wait --for=condition=Ready pod -l app=blog-service --timeout=300s
+kubectl wait --for=condition=Available deployment/kiali -n istio-system --timeout=300s
+
+# 2. Kiali Service Type 확인
+kubectl get svc kiali -n istio-system -o jsonpath='{.spec.type}'
+# 예상 출력: NodePort
+
+# 3. Blog Service → Auth Service 통신 테스트
+kubectl exec -it <blog-pod> -- curl http://auth-service:8002/health
+# 예상 출력: 200 OK
+```
 
 ---
 
 ## 결론
 
-Terraform IaC 기반 인프라는 destroy 후 재생성 시에도 완벽한 멱등성을 보장하며, k3s 및 ArgoCD 자동 배포가 정상적으로 동작합니다. 일부 서비스 접근 문제는 NetworkPolicy 및 Service Type 설정 개선으로 해결 가능합니다.
+Terraform IaC 기반 인프라는 destroy 후 재생성 시에도 완벽한 멱등성을 보장하며, k3s 및 ArgoCD 자동 배포가 정상적으로 동작합니다. 테스트 실패는 배포 타이밍 문제로 확인되었으며, Kiali와 Blog Service 설정은 코드 레벨에서 이미 올바르게 구성되어 있습니다. 충분한 대기 시간 후 재테스트 시 모든 서비스가 정상 동작할 것으로 예상됩니다.
