@@ -35,6 +35,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
+    # Envoy sidecar stats scraping 허용 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15090
   egress:
     # Backend 서비스들로 송신
     - to:
@@ -114,6 +122,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8002
+    # Envoy sidecar stats scraping 허용 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15090
   egress:
     # user-service로 송신 (사용자 조회)
     - to:
@@ -187,6 +203,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8001
+    # Envoy sidecar stats scraping 허용 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15090
   egress:
     # PostgreSQL로 송신
     - to:
@@ -257,6 +281,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8005
+    # Envoy sidecar stats scraping 허용 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15090
   egress:
     # PostgreSQL로 송신
     - to:
@@ -322,6 +354,14 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+    # Envoy sidecar stats scraping 허용 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15090
   egress:
     # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
     - to:
