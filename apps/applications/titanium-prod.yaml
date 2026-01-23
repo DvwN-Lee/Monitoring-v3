@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: titanium-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/DvwN-Lee/Monitoring-v3.git
+    targetRevision: main
+    path: k8s-manifests/overlays/gcp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: titanium-prod
+  # Issue #39: Bootstrap script에서 생성한 Secret 값 보존
+  # ArgoCD selfHeal이 Git의 placeholder 값으로 덮어쓰지 않도록 설정
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: prod-app-secrets
+      jsonPointers:
+        - /data/JWT_PRIVATE_KEY
+        - /data/JWT_PUBLIC_KEY
+        - /data/JWT_SECRET_KEY
+        - /data/INTERNAL_API_SECRET
+        - /data/POSTGRES_PASSWORD
+        - /data/REDIS_PASSWORD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
