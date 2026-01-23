@@ -22,11 +22,6 @@ spec:
             enabled: true
             prometheus:
               enabled: true
-        meshConfig:
-          defaultConfig:
-            tracing:
-              zipkin:
-                address: zipkin.istio-system:9411
   destination:
     server: https://kubernetes.default.svc
     namespace: istio-system

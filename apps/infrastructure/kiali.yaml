@@ -24,11 +24,11 @@ spec:
             config_map_name: istio
             istio_sidecar_injector_config_map_name: istio-sidecar-injector
           prometheus:
-            url: http://kube-prometheus-stack-prometheus.monitoring:9090
+            url: http://prometheus-kube-prometheus-prometheus.monitoring:9090
           grafana:
             enabled: true
-            url: http://kube-prometheus-stack-grafana.monitoring
-            in_cluster_url: http://kube-prometheus-stack-grafana.monitoring
+            url: http://prometheus-grafana.monitoring:80
+            in_cluster_url: http://prometheus-grafana.monitoring:80
           tracing:
             enabled: false
       postRenderers:
