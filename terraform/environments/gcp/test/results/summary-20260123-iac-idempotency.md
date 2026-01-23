@@ -174,9 +174,9 @@ and found no differences, so no changes are needed.
 
 ## 핵심 성과
 
-**Terraform 멱등성 완벽 보장**:
+**Terraform 멱등성 검증**:
 - 인프라 재생성 후 terraform plan 재실행 시 0 changes 확인
-- IaC 코드와 실제 인프라 간 완벽한 일치 검증
+- IaC 코드와 실제 인프라 간 일치 검증
 
 **k3s 자동 설치 검증**:
 - cloud-init을 통한 k3s v1.34.3+k3s1 자동 설치 성공
@@ -246,4 +246,4 @@ kubectl exec -it <blog-pod> -- curl http://auth-service:8002/health
 
 ## 결론
 
-Terraform IaC 기반 인프라는 destroy 후 재생성 시에도 완벽한 멱등성을 보장하며, k3s 및 ArgoCD 자동 배포가 정상적으로 동작합니다. 테스트 실패는 배포 타이밍 문제로 확인되었으며, Kiali와 Blog Service 설정은 코드 레벨에서 이미 올바르게 구성되어 있습니다. 충분한 대기 시간 후 재테스트 시 모든 서비스가 정상 동작할 것으로 예상됩니다.
+Terraform IaC 기반 인프라는 destroy 후 재생성 시에도 멱등성을 보장하며, k3s 및 ArgoCD 자동 배포가 정상적으로 동작합니다. 테스트 실패는 배포 타이밍 문제로 확인되었으며, Kiali와 Blog Service 설정은 코드 레벨에서 이미 올바르게 구성되어 있습니다. 충분한 대기 시간 후 재테스트 시 모든 서비스가 정상 동작할 것으로 예상됩니다.
