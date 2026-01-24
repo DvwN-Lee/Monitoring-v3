@@ -5,4 +5,4 @@ metadata:
   namespace: titanium-prod
 spec:
   mtls:
-    mode: STRICT
+    mode: PERMISSIVE  # Temporary: STRICT -> PERMISSIVE for Ingress Gateway compatibility
