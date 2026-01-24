@@ -8,3 +8,4 @@ resources:
   - kube-prometheus-stack.yaml
   - loki-stack.yaml
   - kiali.yaml
+  - external-secrets-operator.yaml

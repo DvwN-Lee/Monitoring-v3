@@ -11,6 +11,9 @@ namePrefix: prod-
 resources:
   - ../../base
   - namespace.yaml
+  # External Secrets
+  - external-secrets/secret-store.yaml
+  - external-secrets/app-secrets.yaml
   # PostgreSQL Resources
   - postgres/configmap.yaml
   - postgres/pvc.yaml
@@ -33,12 +36,6 @@ resources:
 
 # Patches for GCP environment
 patches:
-  # Secret 패치 (JWT 키 및 민감 정보)
-  - path: secret-patch.yaml
-    target:
-      kind: Secret
-      name: app-secrets
-
   # Remove SQLite PVC from user-service deployment
   - path: patches/user-service-deployment-patch.yaml
     target:
