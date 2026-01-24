@@ -16,11 +16,34 @@ spec:
     helm:
       releaseName: prometheus
       values: |
+        prometheusOperator:
+          enabled: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          admissionWebhooks:
+            enabled: false
+            patch:
+              enabled: false
+          tls:
+            enabled: false
         prometheus:
+          enabled: true
           prometheusSpec:
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
             retention: 30d
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
             storageSpec:
               volumeClaimTemplate:
                 spec:
