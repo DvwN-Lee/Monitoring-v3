@@ -9,7 +9,7 @@ spec:
     - "."
   trafficPolicy:
     tls:
-      mode: ISTIO_MUTUAL
+      mode: DISABLE  # Temporary: ISTIO_MUTUAL -> DISABLE for Ingress Gateway compatibility
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
