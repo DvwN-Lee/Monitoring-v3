@@ -68,10 +68,15 @@ spec:
 ### 근본 원인
 Istio Ingress Gateway (istio-system namespace)에서 Backend Service (titanium-prod namespace)로 연결 시 mTLS 인증 실패.
 
-**추정 원인**:
-1. Gateway가 STRICT mTLS 모드인 Backend Service에 연결할 때 적절한 클라이언트 인증서를 제공하지 못함
-2. Cross-namespace mTLS 인증 설정 누락
-3. Gateway의 ServiceAccount와 Backend의 SPIFFE ID 매칭 실패
+**확인된 원인**:
+1. PeerAuthentication을 PERMISSIVE로 변경했으나 DestinationRule이 여전히 ISTIO_MUTUAL 모드 사용
+2. DestinationRule(Client-side)과 PeerAuthentication(Server-side)의 불일치
+3. Gateway가 ISTIO_MUTUAL을 사용하려 하지만 적절한 클라이언트 인증서 제공 불가
+
+**기술적 세부사항**:
+- PeerAuthentication(Server-side): PERMISSIVE - mTLS 및 Plain text 모두 허용
+- DestinationRule(Client-side): ISTIO_MUTUAL - 항상 mTLS 사용 시도
+- 결과: Gateway가 mTLS로 연결 시도 → 인증 실패 → Connection refused
 
 ## 해결 방안
 
