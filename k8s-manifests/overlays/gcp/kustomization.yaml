@@ -31,10 +31,6 @@ resources:
   # Reference: https://istio.io/latest/docs/ops/integrations/prometheus/
   # - application-servicemonitors.yaml
 
-# Strategic merge patches
-patchesStrategicMerge:
-  - istio/kiali-service-patch.yaml
-
 # Patches for GCP environment
 patches:
   # Secret은 Terraform kubernetes module에서 관리
