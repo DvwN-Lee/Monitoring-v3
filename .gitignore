@@ -50,3 +50,7 @@ Thumbs.db
 kubeconfig
 config-*
 *.kubeconfig
+
+# Kubernetes Secrets (민감 정보 보호)
+secret-patch.yaml
+**/secret-patch.yaml
