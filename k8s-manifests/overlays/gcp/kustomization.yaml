@@ -26,6 +26,7 @@ resources:
   - istio/peer-authentication.yaml
   - istio/peer-authentication-databases.yaml
   - istio/destination-rules.yaml
+  - istio/authorization-policy.yaml
   - istio/servicemonitors.yaml
   # Application ServiceMonitors (currently disabled)
   # Reason: Istio mTLS STRICT mode blocks Prometheus scraping from outside mesh
