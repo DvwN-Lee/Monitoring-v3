@@ -1,27 +1,47 @@
-# GCP Environment Configuration Example
-
-# GCP Project ID (required)
+# GCP Project Configuration
+# REQUIRED: Update with your GCP project ID
 project_id = "your-gcp-project-id"
 
 # GCP Region and Zone
+# Recommended: asia-northeast3 (Seoul) for Korean users
 region = "asia-northeast3"
 zone   = "asia-northeast3-a"
 
 # Cluster Configuration
 cluster_name = "titanium-k3s"
-worker_count = 2
+worker_count = 1
 
 # Network Configuration
 subnet_cidr = "10.128.0.0/20"
 
 # Instance Configuration
+# e2-medium: 2 vCPU, 4GB RAM (suitable for master node)
+# e2-standard-2: 2 vCPU, 8GB RAM (suitable for worker node)
 master_machine_type = "e2-medium"
-worker_machine_type = "e2-medium"
+worker_machine_type = "e2-standard-2"
 os_image            = "ubuntu-os-cloud/ubuntu-2204-lts"
 
-# SSH Configuration
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
+# Spot VM Configuration
+# Set to true for cost savings (recommended for development)
+# Set to false for production stability
+use_spot_for_workers = true
 
-# PostgreSQL Configuration (sensitive)
-# Set via environment variable: export TF_VAR_postgres_password="your-password"
-# postgres_password = "your-secure-password"
+# Disk Configuration (GB)
+master_disk_size = 30
+worker_disk_size = 40
+
+# SSH Configuration
+# REQUIRED: Path to your SSH public key
+ssh_public_key_path = "~/.ssh/your-ssh-key.pub"
+
+# Admin Access Configuration
+# Current IP is auto-detected; add additional CIDRs if needed
+# Example: Allow access from office network
+# additional_admin_cidrs = ["203.0.113.0/24"]
+additional_admin_cidrs = []
+
+# Grafana Admin Password
+# SECURITY: Use environment variable instead of hardcoding
+# export TF_VAR_grafana_admin_password="your-secure-password"
+# Or use secrets.tfvars file (add to .gitignore)
+# grafana_admin_password = "change-me-secure-password"

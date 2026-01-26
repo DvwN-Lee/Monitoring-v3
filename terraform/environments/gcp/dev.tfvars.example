@@ -1,0 +1,31 @@
+# Development Environment Configuration
+
+# GCP Project Configuration
+project_id = "your-dev-project-id"
+region     = "asia-northeast3"
+zone       = "asia-northeast3-a"
+
+# Cluster Configuration (smaller for dev)
+cluster_name = "titanium-k3s-dev"
+worker_count = 1
+
+# Network Configuration
+subnet_cidr = "10.128.0.0/20"
+
+# Instance Configuration (cost-optimized for dev)
+master_machine_type = "e2-small"
+worker_machine_type = "e2-medium"
+os_image            = "ubuntu-os-cloud/ubuntu-2204-lts"
+
+# Spot VM Configuration (cost savings for dev)
+use_spot_for_workers = true
+
+# Disk Configuration (minimal for dev)
+master_disk_size = 20
+worker_disk_size = 30
+
+# SSH Configuration
+ssh_public_key_path = "~/.ssh/titanium-dev-key.pub"
+
+# Admin Access Configuration
+additional_admin_cidrs = []

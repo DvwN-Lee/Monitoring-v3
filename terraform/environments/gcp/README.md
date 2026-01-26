@@ -18,6 +18,25 @@ Google Cloud Platform에서 k3s cluster와 ArgoCD를 완전 자동화로 배포�
 3. Terraform >= 1.5.0
 4. SSH keypair 생성 (기본: ~/.ssh/id_rsa.pub)
 
+## Quick Start
+
+자동화 스크립트를 사용한 빠른 시작:
+
+```bash
+# 1. Init script로 자동 설정
+./scripts/init-terraform.sh YOUR_PROJECT_ID
+
+# 2. terraform.tfvars 파일 생성 및 수정
+cp terraform.tfvars.example terraform.tfvars
+# PROJECT_ID, SSH key path 등 수정
+
+# 3. 배포
+terraform plan -var-file="secrets.tfvars"
+terraform apply -var-file="secrets.tfvars"
+```
+
+자세한 설정 방법은 [docs/terraform/setup-guide.md](../../../docs/terraform/setup-guide.md) 참조
+
 ## GCP Setup
 
 ### 1. GCP Project 생성 및 API 활성화

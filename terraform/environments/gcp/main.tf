@@ -56,6 +56,8 @@ locals {
 resource "google_compute_network" "vpc" {
   name                    = "${var.cluster_name}-vpc"
   auto_create_subnetworks = false
+
+  depends_on = [google_project_service.compute]
 }
 
 # Subnet
@@ -70,6 +72,8 @@ resource "google_compute_subnetwork" "subnet" {
 resource "google_service_account" "k3s_sa" {
   account_id   = "${var.cluster_name}-sa"
   display_name = "Service Account for K3s Cluster"
+
+  depends_on = [google_project_service.iam]
 }
 
 # IAM Role Bindings for logging and monitoring
