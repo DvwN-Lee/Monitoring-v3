@@ -45,8 +45,10 @@ class BlogDatabase:
         if self.use_postgres:
             try:
                 self.pool = await asyncpg.create_pool(
-                    min_size=5,
+                    min_size=2,
                     max_size=20,
+                    timeout=30,
+                    command_timeout=10,
                     **DB_CONFIG
                 )
                 logger.info(f"PostgreSQL connection pool created: {DB_CONFIG['host']}:{DB_CONFIG['port']}")
