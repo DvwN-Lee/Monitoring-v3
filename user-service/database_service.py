@@ -67,8 +67,10 @@ class UserServiceDatabase:
         if self.use_postgres:
             try:
                 self.pool = await asyncpg.create_pool(
-                    min_size=5,
+                    min_size=2,
                     max_size=20,
+                    timeout=30,
+                    command_timeout=10,
                     **self.db_config
                 )
                 logger.info(f"PostgreSQL connection pool created: {self.db_config['host']}:{self.db_config['port']}")
