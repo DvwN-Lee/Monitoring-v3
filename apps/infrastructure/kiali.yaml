@@ -18,6 +18,9 @@ spec:
       values: |
         deployment:
           namespace: istio-system
+          service_type: NodePort
+        server:
+          node_port: 31200
         external_services:
           istio:
             root_namespace: istio-system
@@ -31,19 +34,6 @@ spec:
             in_cluster_url: http://prometheus-grafana.monitoring:80
           tracing:
             enabled: false
-      postRenderers:
-        - kustomize:
-            patches:
-              - target:
-                  kind: Service
-                  name: kiali
-                patch: |-
-                  - op: replace
-                    path: /spec/type
-                    value: NodePort
-                  - op: add
-                    path: /spec/ports/0/nodePort
-                    value: 31200
   destination:
     server: https://kubernetes.default.svc
     namespace: istio-system
