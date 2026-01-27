@@ -53,12 +53,12 @@ spec:
                       storage: 50Gi
           service:
             type: NodePort
-            nodePort: 30090
+            nodePort: 31090
         grafana:
           adminPassword: admin
           service:
             type: NodePort
-            nodePort: 30300
+            nodePort: 31300
           persistence:
             enabled: true
             size: 10Gi
