@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: traffic-generator
+  labels:
+    app: traffic-generator
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: traffic-generator
+          annotations:
+            sidecar.istio.io/inject: "true"
+            proxy.istio.io/config: |
+              holdApplicationUntilProxyStarts: true
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: traffic-generator
+              image: curlimages/curl:latest
+              command: ["/bin/sh", "/scripts/generate-traffic.sh"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: traffic-generator-script
+                defaultMode: 0755
