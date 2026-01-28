@@ -17,13 +17,11 @@ spec:
       credentialName: titanium-tls-credential
     hosts:
     - "*"
-  # HTTP Server (Redirect to HTTPS)
+  # HTTP Server (Allow direct HTTP for testing)
   - port:
       number: 80
       name: http
       protocol: HTTP
-    tls:
-      httpsRedirect: true
     hosts:
     - "*"
 ---
