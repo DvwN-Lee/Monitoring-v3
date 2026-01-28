@@ -3,7 +3,7 @@
 
 terraform {
   backend "gcs" {
-    bucket = "titanium-terraform-state"
+    bucket = "titanium-k3s-terraform-state"
     prefix = "gcp/k3s-cluster"
   }
 }
