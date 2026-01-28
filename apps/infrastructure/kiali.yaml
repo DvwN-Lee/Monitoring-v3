@@ -21,6 +21,8 @@ spec:
           service_type: NodePort
         server:
           node_port: 31200
+        auth:
+          strategy: anonymous
         external_services:
           istio:
             root_namespace: istio-system
