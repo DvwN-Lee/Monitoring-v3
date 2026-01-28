@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traffic-generator-script
+  labels:
+    app: traffic-generator
+data:
+  generate-traffic.sh: |
+    #!/bin/sh
+    set -e
+
+    API_GATEWAY="http://prod-api-gateway-service:8000"
+    USER_SERVICE="http://prod-user-service:8001"
+    AUTH_SERVICE="http://prod-auth-service:8002"
+    BLOG_SERVICE="http://prod-blog-service:8005"
+
+    TIMESTAMP=$(date +%s)
+    USERNAME="trafficbot_${TIMESTAMP}"
+    PASSWORD="TestPass123!"
+
+    echo "=== Traffic Generator Start ==="
+
+    # 1. API Gateway health check
+    echo "[1/7] API Gateway health check"
+    curl -sf -o /dev/null -w "HTTP %{http_code}\n" "${API_GATEWAY}/health" || true
+    sleep 1
+
+    # 2. User registration
+    echo "[2/7] User registration: ${USERNAME}"
+    curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+      -X POST "${USER_SERVICE}/users" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"${USERNAME}\",\"email\":\"${USERNAME}@test.local\",\"password\":\"${PASSWORD}\"}" || true
+    sleep 2
+
+    # 3. Login and get JWT
+    echo "[3/7] Login"
+    LOGIN_RESPONSE=$(curl -sf \
+      -X POST "${AUTH_SERVICE}/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" 2>/dev/null) || true
+
+    TOKEN=""
+    if echo "${LOGIN_RESPONSE}" | grep -q "access_token"; then
+      TOKEN=$(echo "${LOGIN_RESPONSE}" | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
+      echo "JWT acquired"
+    else
+      echo "Login failed, continuing without JWT"
+    fi
+    sleep 1
+
+    # 4. Verify JWT
+    echo "[4/7] JWT verification"
+    if [ -n "${TOKEN}" ]; then
+      curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${AUTH_SERVICE}/verify" || true
+    fi
+    sleep 1
+
+    # 5. Get blog posts list
+    echo "[5/7] Blog posts list"
+    curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+      "${BLOG_SERVICE}/blog/api/posts" || true
+    sleep 1
+
+    # 6. Create blog post (with JWT)
+    echo "[6/7] Create blog post"
+    if [ -n "${TOKEN}" ]; then
+      curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+        -X POST "${BLOG_SERVICE}/blog/api/posts" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d "{\"title\":\"Traffic Test ${TIMESTAMP}\",\"content\":\"Automated traffic generation\",\"category\":\"test\"}" || true
+    fi
+    sleep 1
+
+    # 7. Get categories
+    echo "[7/7] Blog categories"
+    curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+      "${BLOG_SERVICE}/blog/api/categories" || true
+
+    echo "=== Traffic Generator Complete ==="
+
+    # Istio sidecar graceful shutdown
+    curl -sf -XPOST http://localhost:15020/quitquitquit || true
