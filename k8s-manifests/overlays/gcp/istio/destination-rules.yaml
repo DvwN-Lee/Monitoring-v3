@@ -9,7 +9,7 @@ spec:
     - "."
   trafficPolicy:
     tls:
-      mode: DISABLE  # Temporary: ISTIO_MUTUAL -> DISABLE for Ingress Gateway compatibility
+      mode: ISTIO_MUTUAL
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
@@ -17,7 +17,7 @@ metadata:
   name: postgresql-service-disable-mtls
   namespace: titanium-prod
 spec:
-  host: postgresql-service
+  host: prod-postgresql-service
   trafficPolicy:
     tls:
       mode: DISABLE
