@@ -55,6 +55,16 @@ patches:
       kind: Deployment
       name: auth-service-deployment
 
+  # Fix VirtualService gateway reference for namePrefix compatibility
+  - patch: |-
+      - op: replace
+        path: /spec/gateways
+        value:
+          - prod-titanium-gateway
+    target:
+      kind: VirtualService
+      name: titanium-vs
+
   # Add Istio sidecar resource limits to all Deployments
   - patch: |-
       apiVersion: apps/v1
