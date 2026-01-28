@@ -37,6 +37,8 @@ spec:
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
             retention: 30d
+            externalUrl: "/prometheus"
+            routePrefix: "/prometheus"
             resources:
               requests:
                 cpu: 200m
@@ -56,6 +58,10 @@ spec:
             nodePort: 31090
         grafana:
           adminPassword: admin
+          grafana.ini:
+            server:
+              root_url: "%(protocol)s://%(domain)s/grafana"
+              serve_from_sub_path: true
           service:
             type: NodePort
             nodePort: 31300

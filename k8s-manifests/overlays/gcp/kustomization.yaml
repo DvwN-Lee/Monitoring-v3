@@ -28,6 +28,7 @@ resources:
   - istio/destination-rules.yaml
   - istio/authorization-policy.yaml
   - istio/servicemonitors.yaml
+  - istio/monitoring-virtualservice.yaml
   # Traffic Generator for Kiali Traffic Graph
   - traffic-generator/configmap.yaml
   - traffic-generator/cronjob.yaml
