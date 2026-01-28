@@ -7,7 +7,7 @@ spec:
   hosts:
   - "*"
   gateways:
-  - titanium-gateway
+  - prod-titanium-gateway
   http:
   - match:
     - uri:

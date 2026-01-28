@@ -37,7 +37,7 @@ spec:
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
             retention: 30d
-            externalUrl: "/prometheus"
+            externalUrl: "http://prometheus-kube-prometheus-prometheus.monitoring:9090/prometheus"
             routePrefix: "/prometheus"
             resources:
               requests:
