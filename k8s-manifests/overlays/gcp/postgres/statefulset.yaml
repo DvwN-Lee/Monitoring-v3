@@ -56,11 +56,15 @@ spec:
             command: ["pg_isready", "-U", "postgres"]
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
         readinessProbe:
           exec:
             command: ["pg_isready", "-U", "postgres"]
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
       volumes:
       - name: postgresql-data
         persistentVolumeClaim:
