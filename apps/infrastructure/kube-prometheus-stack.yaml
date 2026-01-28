@@ -39,6 +39,7 @@ spec:
             retention: 30d
             externalUrl: "http://prometheus-kube-prometheus-prometheus.monitoring:9090/prometheus"
             routePrefix: "/prometheus"
+            probeTimeout: 10
             resources:
               requests:
                 cpu: 200m
