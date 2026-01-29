@@ -20,8 +20,6 @@ spec:
   - match:
     - uri:
         prefix: /prometheus
-    rewrite:
-      uri: /
     route:
     - destination:
         host: prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local
