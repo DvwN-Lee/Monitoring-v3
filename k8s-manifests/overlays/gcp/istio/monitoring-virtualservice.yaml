@@ -28,8 +28,6 @@ spec:
   - match:
     - uri:
         prefix: /grafana
-    rewrite:
-      uri: /
     route:
     - destination:
         host: prometheus-grafana.monitoring.svc.cluster.local
