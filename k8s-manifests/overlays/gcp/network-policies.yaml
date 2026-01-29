@@ -90,7 +90,7 @@ spec:
           port: 53
 ---
 # auth-service NetworkPolicy
-# - Ingress: api-gateway, blog-service에서 수신
+# - Ingress: Istio IngressGateway, api-gateway, blog-service에서 수신
 # - Egress: user-service, Redis로 송신
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -104,6 +104,17 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Istio IngressGateway에서의 직접 라우팅 허용 (/api/login, /api/auth)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istio-ingressgateway
+      ports:
+        - protocol: TCP
+          port: 8002
     - from:
         - podSelector:
             matchLabels:
@@ -171,7 +182,7 @@ spec:
           port: 53
 ---
 # user-service NetworkPolicy
-# - Ingress: api-gateway, auth-service에서만 수신
+# - Ingress: Istio IngressGateway, api-gateway, auth-service에서 수신
 # - Egress: PostgreSQL, Redis로 송신
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -185,6 +196,17 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Istio IngressGateway에서의 직접 라우팅 허용 (/api/users)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istio-ingressgateway
+      ports:
+        - protocol: TCP
+          port: 8001
     - from:
         - podSelector:
             matchLabels:
@@ -252,8 +274,8 @@ spec:
           port: 53
 ---
 # blog-service NetworkPolicy
-# - Ingress: api-gateway에서만 수신
-# - Egress: PostgreSQL, auth-service로 송신
+# - Ingress: Istio IngressGateway, api-gateway에서 수신
+# - Egress: PostgreSQL, auth-service, Redis로 송신
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -266,6 +288,17 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Istio IngressGateway에서의 직접 라우팅 허용 (/blog, /)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istio-ingressgateway
+      ports:
+        - protocol: TCP
+          port: 8005
     - from:
         - podSelector:
             matchLabels:
@@ -306,6 +339,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8002
+    # Redis로 송신 (캐싱)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
     # Istiod로의 통신 허용 (Istio sidecar CSR 서명, XDS 구성)
     - to:
         - namespaceSelector:
@@ -330,7 +371,7 @@ spec:
           port: 53
 ---
 # Redis NetworkPolicy
-# - Ingress: auth-service, user-service에서만 수신
+# - Ingress: auth-service, user-service, blog-service에서 수신
 # - Egress: 없음 (Redis는 외부 연결 불필요)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -351,6 +392,9 @@ spec:
         - podSelector:
             matchLabels:
               app: user-service
+        - podSelector:
+            matchLabels:
+              app: blog-service
       ports:
         - protocol: TCP
           port: 6379
