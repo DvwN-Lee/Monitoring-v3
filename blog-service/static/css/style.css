@@ -1,5 +1,5 @@
 /* blog-service/static/css/style.css - Mockup 스타일 적용 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap');
+@import url('/blog/static/css/fonts.css');
 
 * {
     margin: 0;

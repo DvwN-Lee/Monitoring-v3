@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loginBtn.className = 'btn btn-primary';
             loginBtn.id = 'login-btn';
             loginBtn.textContent = '\uB85C\uADF8\uC778';
-            loginBtn.addEventListener('click', Modal.showLogin);
+            loginBtn.addEventListener('click', () => Modal.showLogin());
             authStatus.appendChild(loginBtn);
         }
     };
