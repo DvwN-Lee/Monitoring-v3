@@ -154,6 +154,33 @@ kubectl create secret tls titanium-tls-credential \
 rm -rf "$TLS_TEMP_DIR"
 log "TLS and JWT secrets created successfully"
 
+# CRD Health Validation - ESO cert-controller가 CRD conversion webhook을
+# 정상 등록하지 못하면 ExternalSecret CR이 stuck 상태에 빠짐.
+# Root App 배포 후 ESO CRD가 Established 상태인지 주기적으로 확인하고,
+# 실패 시 ESO Pod를 재시작하여 self-heal을 유도.
+wait_for_eso_crds() {
+    local max_attempts=30
+    local attempt=0
+    log "Waiting for ESO CRDs to become Established..."
+    while [ $attempt -lt $max_attempts ]; do
+        if kubectl get crd externalsecrets.external-secrets.io &>/dev/null; then
+            local status
+            status=$(kubectl get crd externalsecrets.external-secrets.io -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || echo "")
+            if [ "$status" = "True" ]; then
+                log "ESO CRDs are Established."
+                return 0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        log "ESO CRD not ready yet... attempt $attempt/$max_attempts"
+        sleep 10
+    done
+    log "Warning: ESO CRDs not Established after $max_attempts attempts. Restarting ESO pods..."
+    kubectl rollout restart deployment -n external-secrets -l app.kubernetes.io/instance=external-secrets 2>/dev/null || true
+    sleep 30
+    return 1
+}
+
 # Create Root Application (App of Apps Pattern)
 log "Creating Root Application for App of Apps Pattern..."
 cat <<EOFAPP | kubectl apply -f -
@@ -182,6 +209,9 @@ spec:
 EOFAPP
 
 log "Root Application created. ArgoCD will automatically create all child applications from apps/ directory."
+
+# ESO CRD health check 실행 (최대 5분 대기 후 Pod 재시작 시도)
+wait_for_eso_crds || log "Warning: ESO CRD health check failed. Manual intervention may be required."
 
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"

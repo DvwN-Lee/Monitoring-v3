@@ -4,7 +4,7 @@ metadata:
   name: titanium-prod
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-wave: "3"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -16,22 +16,26 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: titanium-prod
-  # Issue #39: Bootstrap script에서 생성한 Secret 값 보존
-  # ArgoCD selfHeal이 Git의 placeholder 값으로 덮어쓰지 않도록 설정
+  # ESO creationPolicy: Owner로 전환하여 Secret lifecycle을 ExternalSecret이 관리
+  # ignoreDifferences로 Secret 필드를 개별 제외하는 방식은 더 이상 불필요
   ignoreDifferences:
     - group: ""
       kind: Secret
       name: prod-app-secrets
       jsonPointers:
-        - /data/JWT_PRIVATE_KEY
-        - /data/JWT_PUBLIC_KEY
-        - /data/JWT_SECRET_KEY
-        - /data/INTERNAL_API_SECRET
-        - /data/POSTGRES_PASSWORD
-        - /data/REDIS_PASSWORD
+        - /data
+        - /metadata/labels
+        - /metadata/annotations
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
