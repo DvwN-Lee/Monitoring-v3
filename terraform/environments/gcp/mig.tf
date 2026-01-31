@@ -82,7 +82,8 @@ resource "google_compute_instance_template" "k3s_worker" {
     google_compute_instance.k3s_master,
     google_service_account.k3s_sa,
     google_project_iam_member.sa_logging,
-    google_project_iam_member.sa_monitoring
+    google_project_iam_member.sa_monitoring,
+    google_project_iam_member.sa_secret_accessor
   ]
 }
 
