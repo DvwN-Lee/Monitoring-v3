@@ -53,12 +53,6 @@ patches:
       kind: Deployment
       name: blog-service-deployment
 
-  # GCP 환경에서는 ExternalSecret이 Secret을 관리하므로 base의 placeholder Secret 제거
-  - path: patches/remove-base-secret.yaml
-    target:
-      kind: Secret
-      name: app-secrets
-
   # Inject secrets into auth-service
   - path: patches/auth-service-deployment-patch.yaml
     target:
