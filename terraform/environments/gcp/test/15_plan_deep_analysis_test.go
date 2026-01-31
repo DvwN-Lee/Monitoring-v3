@@ -38,7 +38,7 @@ func TestPlanDeepAnalysis(t *testing.T) {
 			"google_compute_health_check":            1,
 			"google_service_account":                 1,
 			"google_project_iam_member":              3,
-		"google_secret_manager_secret":           7,
+			"google_secret_manager_secret":           7,
 		}
 
 		actualCounts := make(map[string]int)
