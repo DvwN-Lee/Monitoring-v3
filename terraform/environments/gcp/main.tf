@@ -85,6 +85,37 @@ resource "google_project_iam_member" "sa_monitoring" {
   member  = "serviceAccount:${google_service_account.k3s_sa.email}"
 }
 
+# Secret Manager 접근 권한 (ESO ADC 인증용)
+resource "google_project_iam_member" "sa_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.k3s_sa.email}"
+}
+
+# Secret Manager Resources (껍데기만 관리, Secret Version은 수동 등록)
+locals {
+  secret_names = [
+    "titanium-jwt-private-key",
+    "titanium-jwt-public-key",
+    "titanium-internal-api-secret",
+    "titanium-postgres-user",
+    "titanium-postgres-password",
+    "titanium-jwt-secret-key",
+    "titanium-redis-password",
+  ]
+}
+
+resource "google_secret_manager_secret" "app_secrets" {
+  for_each  = toset(local.secret_names)
+  secret_id = each.value
+
+  replication {
+    auto {}
+  }
+
+  labels = local.common_labels
+}
+
 # Firewall Rules - Allow SSH, k8s API, HTTP, Dashboards
 resource "google_compute_firewall" "allow_ssh" {
   name    = "${var.cluster_name}-allow-ssh"
@@ -225,7 +256,8 @@ resource "google_compute_instance" "k3s_master" {
   depends_on = [
     google_service_account.k3s_sa,
     google_project_iam_member.sa_logging,
-    google_project_iam_member.sa_monitoring
+    google_project_iam_member.sa_monitoring,
+    google_project_iam_member.sa_secret_accessor
   ]
 }
 
