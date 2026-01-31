@@ -161,22 +161,33 @@ log "TLS and JWT secrets created successfully"
 wait_for_eso_crds() {
     local max_attempts=30
     local attempt=0
+    local required_crds="externalsecrets.external-secrets.io clustersecretstores.external-secrets.io secretstores.external-secrets.io"
     log "Waiting for ESO CRDs to become Established..."
     while [ $attempt -lt $max_attempts ]; do
-        if kubectl get crd externalsecrets.external-secrets.io &>/dev/null; then
-            local status
-            status=$(kubectl get crd externalsecrets.external-secrets.io -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || echo "")
-            if [ "$status" = "True" ]; then
-                log "ESO CRDs are Established."
-                return 0
+        local all_ready=true
+        for crd in $required_crds; do
+            if kubectl get crd "$crd" &>/dev/null; then
+                local status
+                status=$(kubectl get crd "$crd" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || echo "")
+                if [ "$status" != "True" ]; then
+                    all_ready=false
+                    break
+                fi
+            else
+                all_ready=false
+                break
             fi
+        done
+        if [ "$all_ready" = true ]; then
+            log "All ESO CRDs are Established."
+            return 0
         fi
         attempt=$((attempt + 1))
         log "ESO CRD not ready yet... attempt $attempt/$max_attempts"
         sleep 10
     done
     log "Warning: ESO CRDs not Established after $max_attempts attempts. Restarting ESO pods..."
-    kubectl rollout restart deployment -n external-secrets -l app.kubernetes.io/instance=external-secrets 2>/dev/null || true
+    kubectl rollout restart deployment -n external-secrets -l app.kubernetes.io/name=external-secrets 2>/dev/null || true
     sleep 30
     return 1
 }
@@ -211,7 +222,7 @@ EOFAPP
 log "Root Application created. ArgoCD will automatically create all child applications from apps/ directory."
 
 # ESO CRD health check 실행 (최대 5분 대기 후 Pod 재시작 시도)
-wait_for_eso_crds || log "Warning: ESO CRD health check failed. Manual intervention may be required."
+wait_for_eso_crds || log "Warning: ESO CRD health check failed. ESO가 selfHeal + retry로 자동 수렴할 때까지 ExternalSecret sync가 지연될 수 있음."
 
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"
