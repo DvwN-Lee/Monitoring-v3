@@ -19,10 +19,12 @@ resources:
 - configmap.yaml
 - secret.yaml
 
-# 기본 라벨만 간단히 적용
-commonLabels:
-  app.kubernetes.io/name: titanium
-  app.kubernetes.io/managed-by: kustomize
+# 기본 라벨 적용 (commonLabels deprecated -> labels 전환)
+labels:
+  - pairs:
+      app.kubernetes.io/name: titanium
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
 
 commonAnnotations:
   titanium.io/environment: base
