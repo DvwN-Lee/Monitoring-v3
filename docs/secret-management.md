@@ -67,7 +67,7 @@ k3s Bootstrap 완료 후 ESO가 Secret을 동기화했는지 확인한다.
 
 ```bash
 kubectl get externalsecrets -A
-kubectl get clustersecretstore gcpsm-secret-store
+kubectl get clustersecretstore prod-gcpsm-secret-store
 ```
 
 ## Secret Rotation 절차
@@ -88,7 +88,7 @@ kubectl get clustersecretstore gcpsm-secret-store
 
 1. ClusterSecretStore 상태 확인:
    ```bash
-   kubectl describe clustersecretstore gcpsm-secret-store
+   kubectl describe clustersecretstore prod-gcpsm-secret-store
    ```
 2. IAM Binding 확인:
    ```bash

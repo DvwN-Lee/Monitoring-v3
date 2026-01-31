@@ -30,6 +30,8 @@ const (
 	DefaultWorkerMachineType = "e2-standard-4"
 	DefaultWorkerCount      = 2
 	DefaultSubnetCIDR       = "10.128.0.0/20"
+	GCPHealthCheckCidr1     = "130.211.0.0/22"
+	GCPHealthCheckCidr2     = "35.191.0.0/16"
 	DefaultMasterDiskSize   = 30
 	DefaultWorkerDiskSize   = 60 // Issue #37: InvalidDiskCapacity 오류 대응
 	TestPostgresPassword    = "TerratestPassword123!"
