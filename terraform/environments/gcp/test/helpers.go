@@ -74,10 +74,9 @@ func GetDefaultTerraformOptions(t *testing.T) *terraform.Options {
 		NoColor:            true,
 	}
 
-	// 테스트 환경 IP를 SSH 허용 목록에 추가 (auto.tfvars 파일 생성)
-	// Terraform은 *.auto.tfvars 파일을 자동으로 로드함
+	// 테스트 환경 IP를 Vars map에 직접 주입 (Issue #95: .auto.tfvars 파일 생성 제거)
 	if ip, err := GetCurrentPublicIP(); err == nil && ip != "" {
-		createSSHTfvars(t, ip)
+		opts.Vars["ssh_allowed_cidrs"] = []string{fmt.Sprintf("%s/32", ip)}
 		t.Logf("테스트 환경 IP 추가: %s/32", ip)
 	}
 
@@ -93,39 +92,6 @@ func GetApplyTerraformOptions(t *testing.T) *terraform.Options {
 	opts.Vars["cluster_name"] = fmt.Sprintf("terratest-%s", uniqueID)
 	t.Logf("Apply 테스트용 고유 클러스터 이름: %s", opts.Vars["cluster_name"])
 	return opts
-}
-
-// createSSHTfvars SSH 허용 CIDR을 위한 tfvars 파일 생성
-func createSSHTfvars(t *testing.T, ip string) string {
-	tfvarsContent := fmt.Sprintf(`ssh_allowed_cidrs = ["%s/32"]`, ip)
-	// Terraform 디렉터리에 절대 경로로 파일 생성
-	absPath, err := filepath.Abs(filepath.Join(GetTerraformDir(), "test-ssh.auto.tfvars"))
-	if err != nil {
-		t.Logf("절대 경로 변환 실패: %v", err)
-		return ""
-	}
-
-	err = os.WriteFile(absPath, []byte(tfvarsContent), 0644)
-	if err != nil {
-		t.Logf("tfvars 파일 생성 실패: %v", err)
-		return ""
-	}
-	t.Logf("tfvars 파일 생성: %s", absPath)
-	return absPath
-}
-
-// createSSHTfvarsInDir 지정된 디렉터리에 SSH tfvars 파일 생성 (격리용)
-func createSSHTfvarsInDir(t *testing.T, ip string, targetDir string) string {
-	tfvarsContent := fmt.Sprintf(`ssh_allowed_cidrs = ["%s/32"]`, ip)
-	absPath := filepath.Join(targetDir, "test-ssh.auto.tfvars")
-
-	err := os.WriteFile(absPath, []byte(tfvarsContent), 0644)
-	if err != nil {
-		t.Logf("tfvars 파일 생성 실패: %v", err)
-		return ""
-	}
-	t.Logf("tfvars 파일 생성 (격리): %s", absPath)
-	return absPath
 }
 
 // GetCurrentPublicIP 현재 공인 IP 조회
@@ -389,9 +355,9 @@ func GetIsolatedTerraformOptions(t *testing.T) (*terraform.Options, string) {
 		NoColor:            true,
 	}
 
-	// 격리된 임시 디렉터리에 SSH tfvars 생성 (Race condition 방지)
+	// 테스트 환경 IP를 Vars map에 직접 주입 (Issue #95: .auto.tfvars 파일 생성 제거)
 	if ip, err := GetCurrentPublicIP(); err == nil && ip != "" {
-		createSSHTfvarsInDir(t, ip, tempDir)
+		opts.Vars["ssh_allowed_cidrs"] = []string{fmt.Sprintf("%s/32", ip)}
 		t.Logf("테스트 환경 IP 추가 (격리): %s/32", ip)
 	}
 
