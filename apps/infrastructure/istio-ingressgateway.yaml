@@ -16,6 +16,8 @@ spec:
     helm:
       releaseName: istio-ingressgateway
       values: |
+        image:
+          tag: "1.24.2"
         service:
           type: NodePort
           ports:
