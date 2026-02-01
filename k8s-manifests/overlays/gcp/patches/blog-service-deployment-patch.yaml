@@ -47,4 +47,9 @@ spec:
             configMapKeyRef:
               name: app-config
               key: POSTGRES_SSLMODE
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: REDIS_PASSWORD
         # Remove BLOG_DATABASE_PATH (SQLite)

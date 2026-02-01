@@ -47,6 +47,11 @@ spec:
             configMapKeyRef:
               name: app-config
               key: POSTGRES_SSLMODE
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: REDIS_PASSWORD
         # Remove volumeMounts for SQLite
         volumeMounts: []
       # Remove volumes for SQLite PVC

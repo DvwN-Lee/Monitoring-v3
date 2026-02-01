@@ -10,7 +10,11 @@ AUTH_SERVICE_URL = os.getenv('AUTH_SERVICE_URL', 'http://auth-service:8002')
 # Redis Configuration
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis-service')
 REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
-REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', '')
+if REDIS_PASSWORD:
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"
+else:
+    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
 
 # Determine which DB to use
 USE_POSTGRES = os.getenv('USE_POSTGRES', 'false').lower() == 'true'

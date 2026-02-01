@@ -23,6 +23,10 @@ class Config:
         self.server = ServerConfig()
         self.database = DatabaseConfig()
         self.cache = CacheConfig()
-        self.REDIS_URL = f"redis://{self.cache.host}:{self.cache.port}"
+        redis_password = os.getenv('REDIS_PASSWORD', '')
+        if redis_password:
+            self.REDIS_URL = f"redis://:{redis_password}@{self.cache.host}:{self.cache.port}"
+        else:
+            self.REDIS_URL = f"redis://{self.cache.host}:{self.cache.port}"
 
 config = Config()

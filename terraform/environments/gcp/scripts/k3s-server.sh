@@ -103,15 +103,6 @@ kubectl patch svc argocd-server -n argocd --type='json' -p="[{\"op\":\"replace\"
 # Make ArgoCD server insecure (no TLS) for easier access
 kubectl patch deployment argocd-server -n argocd --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--insecure"}]'
 
-# Create PostgreSQL secret for titanium-prod
-log "Creating PostgreSQL secret..."
-kubectl create secret generic postgresql-secret \
-  --from-literal=POSTGRES_DB=titanium \
-  --from-literal=POSTGRES_USER=postgres \
-  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-  --namespace=titanium-prod \
-  --dry-run=client -o yaml | kubectl apply -f -
-
 # Generate JWT RS256 Key Pair for auth-service
 log "Generating JWT RS256 key pair..."
 JWT_TEMP_DIR=$(mktemp -d)
