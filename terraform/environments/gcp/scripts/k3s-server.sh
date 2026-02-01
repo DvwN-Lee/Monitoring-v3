@@ -132,6 +132,23 @@ kubectl create secret generic prod-app-secrets \
   --from-literal=REDIS_PASSWORD="$(openssl rand -hex 16)" \
   --namespace=titanium-prod \
   --dry-run=client -o yaml | kubectl apply -f -
+## GCP Secret Manager에 Secret 값 업로드 (ExternalSecret 연동)
+log "Uploading secrets to GCP Secret Manager..."
+cat "$JWT_TEMP_DIR/jwt-private.pem" | gcloud secrets versions add titanium-jwt-private-key --data-file=- 2>/dev/null || \
+  gcloud secrets create titanium-jwt-private-key --data-file="$JWT_TEMP_DIR/jwt-private.pem"
+cat "$JWT_TEMP_DIR/jwt-public.pem" | gcloud secrets versions add titanium-jwt-public-key --data-file=- 2>/dev/null || \
+  gcloud secrets create titanium-jwt-public-key --data-file="$JWT_TEMP_DIR/jwt-public.pem"
+
+# JWT_SECRET_KEY, INTERNAL_API_SECRET, REDIS_PASSWORD는 kubectl create 시 사용한 값을 재생성하여 동일 값 보장이 어려우므로
+# Secret에서 추출하여 GCP SM에 업로드
+for secret_key in JWT_SECRET_KEY INTERNAL_API_SECRET REDIS_PASSWORD POSTGRES_USER POSTGRES_PASSWORD; do
+  sm_name="titanium-$(echo "$secret_key" | tr '[:upper:]_' '[:lower:]-')"
+  value=$(kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath="{.data.$secret_key}" | base64 -d)
+  echo -n "$value" | gcloud secrets versions add "$sm_name" --data-file=- 2>/dev/null || \
+    echo -n "$value" | gcloud secrets create "$sm_name" --data-file=-
+done
+log "GCP Secret Manager upload completed"
+
 rm -rf "$JWT_TEMP_DIR"
 
 # Generate TLS Certificate for Istio Gateway
