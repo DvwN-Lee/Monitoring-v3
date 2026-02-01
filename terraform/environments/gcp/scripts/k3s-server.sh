@@ -109,37 +109,31 @@ JWT_TEMP_DIR=$(mktemp -d)
 openssl genrsa -out "$JWT_TEMP_DIR/jwt-private.pem" 2048 2>/dev/null
 openssl rsa -in "$JWT_TEMP_DIR/jwt-private.pem" -pubout -out "$JWT_TEMP_DIR/jwt-public.pem" 2>/dev/null
 
-# Create app-secrets with JWT RS256 keys
-# Issue #39: --from-file 사용으로 이중 base64 인코딩 문제 해결
-# kubectl --from-file은 파일 내용을 자동으로 base64 인코딩하여 Secret에 저장
-log "Creating app-secrets with JWT RS256 keys..."
-kubectl create secret generic prod-app-secrets \
-  --from-literal=POSTGRES_USER=postgres \
-  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-  --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
-  --from-file=JWT_PRIVATE_KEY="$JWT_TEMP_DIR/jwt-private.pem" \
-  --from-file=JWT_PUBLIC_KEY="$JWT_TEMP_DIR/jwt-public.pem" \
-  --from-literal=INTERNAL_API_SECRET="$(openssl rand -hex 32)" \
-  --from-literal=REDIS_PASSWORD="$(openssl rand -hex 16)" \
-  --namespace=titanium-prod \
-  --dry-run=client -o yaml | kubectl apply -f -
-## GCP Secret Manager에 Secret 값 업로드 (ExternalSecret 연동)
-log "Uploading secrets to GCP Secret Manager..."
-cat "$JWT_TEMP_DIR/jwt-private.pem" | gcloud secrets versions add titanium-jwt-private-key --data-file=- 2>/dev/null || \
-  gcloud secrets create titanium-jwt-private-key --data-file="$JWT_TEMP_DIR/jwt-private.pem"
-cat "$JWT_TEMP_DIR/jwt-public.pem" | gcloud secrets versions add titanium-jwt-public-key --data-file=- 2>/dev/null || \
-  gcloud secrets create titanium-jwt-public-key --data-file="$JWT_TEMP_DIR/jwt-public.pem"
+# Secret 값 생성 (GCP Secret Manager가 단일 소스)
+JWT_SECRET_KEY="$(openssl rand -hex 32)"
+INTERNAL_API_SECRET="$(openssl rand -hex 32)"
+REDIS_PASSWORD="$(openssl rand -hex 16)"
 
-# JWT_SECRET_KEY, INTERNAL_API_SECRET, REDIS_PASSWORD는 kubectl create 시 사용한 값을 재생성하여 동일 값 보장이 어려우므로
-# Secret에서 추출하여 GCP SM에 업로드
-for secret_key in JWT_SECRET_KEY INTERNAL_API_SECRET REDIS_PASSWORD POSTGRES_USER POSTGRES_PASSWORD; do
-  sm_name="titanium-$(echo "$secret_key" | tr '[:upper:]_' '[:lower:]-')"
-  value=$(kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath="{.data.$secret_key}" | base64 -d)
+# GCP Secret Manager에 Secret 값 업로드
+# ExternalSecret이 이 값을 가져와 prod-app-secrets Kubernetes Secret을 자동 생성
+log "Uploading secrets to GCP Secret Manager (single source of truth)..."
+
+upload_secret() {
+  local sm_name="$1"
+  local value="$2"
   echo -n "$value" | gcloud secrets versions add "$sm_name" --data-file=- 2>/dev/null || \
     echo -n "$value" | gcloud secrets create "$sm_name" --data-file=-
-done
-log "GCP Secret Manager upload completed"
+}
 
+upload_secret "titanium-jwt-private-key" "$(cat "$JWT_TEMP_DIR/jwt-private.pem")"
+upload_secret "titanium-jwt-public-key" "$(cat "$JWT_TEMP_DIR/jwt-public.pem")"
+upload_secret "titanium-jwt-secret-key" "$JWT_SECRET_KEY"
+upload_secret "titanium-internal-api-secret" "$INTERNAL_API_SECRET"
+upload_secret "titanium-redis-password" "$REDIS_PASSWORD"
+upload_secret "titanium-postgres-user" "postgres"
+upload_secret "titanium-postgres-password" "$POSTGRES_PASSWORD"
+
+log "GCP Secret Manager upload completed"
 rm -rf "$JWT_TEMP_DIR"
 
 # Generate TLS Certificate for Istio Gateway
@@ -190,6 +184,20 @@ spec:
 EOFAPP
 
 log "Root Application created. ArgoCD will automatically create all child applications from apps/ directory."
+
+# ExternalSecret이 prod-app-secrets를 생성할 때까지 대기
+# ArgoCD가 ExternalSecret operator와 titanium-prod application을 sync한 후 Secret이 자동 생성됨
+log "Waiting for ExternalSecret to create prod-app-secrets..."
+for i in $(seq 1 60); do
+  if kubectl get secret prod-app-secrets -n titanium-prod >/dev/null 2>&1; then
+    log "prod-app-secrets created by ExternalSecret (attempt $i)"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    log "WARNING: prod-app-secrets not created after 5 minutes. ExternalSecret sync may be delayed."
+  fi
+  sleep 5
+done
 
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"
