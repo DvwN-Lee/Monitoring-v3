@@ -67,7 +67,7 @@ spec:
             runAsGroup: 472
           grafana.ini:
             server:
-              root_url: "%(protocol)s://%(domain)s:%(http_port)s/grafana"
+              root_url: "%(protocol)s://%(domain)s:31300/grafana"
               serve_from_sub_path: true
           service:
             type: NodePort
