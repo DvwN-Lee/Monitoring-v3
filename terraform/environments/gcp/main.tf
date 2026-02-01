@@ -92,7 +92,14 @@ resource "google_project_iam_member" "sa_secret_accessor" {
   member  = "serviceAccount:${google_service_account.k3s_sa.email}"
 }
 
-# Secret Manager Resources (껍데기만 관리, Secret Version은 수동 등록)
+# Secret Manager 쓰기 권한 (Bootstrap script에서 Secret version 추가용)
+resource "google_project_iam_member" "sa_secret_admin" {
+  project = var.project_id
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:${google_service_account.k3s_sa.email}"
+}
+
+# Secret Manager Resources (껍데기만 관리, Secret Version은 Bootstrap script에서 등록)
 locals {
   secret_names = [
     "titanium-jwt-private-key",
