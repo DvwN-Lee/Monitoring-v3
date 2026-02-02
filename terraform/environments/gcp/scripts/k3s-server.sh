@@ -11,6 +11,13 @@ log() {
 
 log "Starting complete k3s + ArgoCD bootstrap..."
 
+# Idempotency guard: 이미 Bootstrap이 완료된 경우 재실행 방지
+BOOTSTRAP_MARKER="/var/lib/k3s-bootstrap-done"
+if [ -f "$BOOTSTRAP_MARKER" ]; then
+  log "Bootstrap already completed (marker: $BOOTSTRAP_MARKER). Skipping."
+  exit 0
+fi
+
 # Variables from Terraform
 K3S_TOKEN="${k3s_token}"
 POSTGRES_PASSWORD="${postgres_password}"
@@ -50,15 +57,15 @@ done
 # Install k3s server
 if [ -n "$PUBLIC_IP" ]; then
   log "Installing k3s with TLS SAN for $PRIVATE_IP and $PUBLIC_IP"
-  curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" sh -s - server \
-    --write-kubeconfig-mode 644 \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" K3S_TOKEN="$K3S_TOKEN" sh -s - server \
+    --write-kubeconfig-mode 600 \
     --disable traefik \
     --tls-san "$PRIVATE_IP" \
     --tls-san "$PUBLIC_IP"
 else
   log "Installing k3s with private IP only"
-  curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" sh -s - server \
-    --write-kubeconfig-mode 644 \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" K3S_TOKEN="$K3S_TOKEN" sh -s - server \
+    --write-kubeconfig-mode 600 \
     --disable traefik \
     --tls-san "$PRIVATE_IP"
 fi
@@ -149,6 +156,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 # Create TLS Secret in istio-system namespace
 log "Creating TLS secret in istio-system..."
 kubectl create namespace istio-system --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace istio-system istio-injection=enabled --overwrite
 kubectl create secret tls titanium-tls-credential \
   --key="$TLS_TEMP_DIR/tls.key" \
   --cert="$TLS_TEMP_DIR/tls.crt" \
@@ -212,3 +220,4 @@ log "ArgoCD will now automatically sync applications from Git"
 # Mark installation complete
 echo "bootstrap-complete" > /tmp/k3s-status
 echo "$(date)" > /tmp/bootstrap-timestamp
+touch "$BOOTSTRAP_MARKER"
