@@ -3,6 +3,8 @@ kind: StatefulSet
 metadata:
   name: postgresql
   namespace: titanium-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app: postgresql
     app.kubernetes.io/name: titanium

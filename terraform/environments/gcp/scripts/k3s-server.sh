@@ -85,6 +85,21 @@ done
 
 log "k3s node ready: $(kubectl get nodes)"
 
+# Master node 등록 대기 (API server ready 직후 node 등록에 수 초 소요될 수 있음)
+for i in $(seq 1 30); do
+  MASTER_NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && [ -n "$MASTER_NODE" ] && break
+  sleep 2
+done
+if [ -z "$MASTER_NODE" ]; then
+  log "ERROR: Master node not registered after 60 seconds"
+  exit 1
+fi
+
+# Taint master node: 일반 워크로드는 Worker에서만 실행
+# ArgoCD, kube-system Pod는 toleration으로 Master에서 실행 유지
+log "Tainting master node ($MASTER_NODE) to prevent general workload scheduling..."
+kubectl taint nodes "$MASTER_NODE" node-role.kubernetes.io/master=true:NoSchedule --overwrite
+
 # Wait for core system pods
 log "Waiting for core system pods..."
 kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s || log "Warning: Some system pods not ready"
@@ -109,6 +124,17 @@ kubectl patch svc argocd-server -n argocd --type='json' -p="[{\"op\":\"replace\"
 
 # Make ArgoCD server insecure (no TLS) for easier access
 kubectl patch deployment argocd-server -n argocd --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--insecure"}]'
+
+# Patch all ArgoCD Deployments/StatefulSets with master node toleration
+log "Adding master node toleration to ArgoCD workloads..."
+TOLERATION_PATCH='{"spec":{"template":{"spec":{"tolerations":[{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+for deploy in $(kubectl get deployments -n argocd -o jsonpath='{.items[*].metadata.name}'); do
+  kubectl patch deployment "$deploy" -n argocd --type=merge -p="$TOLERATION_PATCH" 2>/dev/null
+done
+for sts in $(kubectl get statefulsets -n argocd -o jsonpath='{.items[*].metadata.name}'); do
+  kubectl patch statefulset "$sts" -n argocd --type=merge -p="$TOLERATION_PATCH" 2>/dev/null
+done
+log "ArgoCD toleration patching complete"
 
 # Generate JWT RS256 Key Pair for auth-service
 log "Generating JWT RS256 key pair..."
@@ -165,6 +191,23 @@ kubectl create secret tls titanium-tls-credential \
 rm -rf "$TLS_TEMP_DIR"
 log "TLS and JWT secrets created successfully"
 
+# Wait for all Worker nodes to join and be Ready before deploying workloads
+EXPECTED_WORKERS="${worker_count}"
+log "Waiting for $EXPECTED_WORKERS Worker node(s) to join the cluster..."
+for i in $(seq 1 120); do
+  READY_WORKERS=$(kubectl get nodes --no-headers 2>/dev/null | grep -v master | grep -c " Ready" || echo 0)
+  if [ "$READY_WORKERS" -ge "$EXPECTED_WORKERS" ]; then
+    log "All Worker nodes Ready: $READY_WORKERS/$EXPECTED_WORKERS"
+    break
+  fi
+  if [ "$i" -eq 120 ]; then
+    log "WARNING: Only $READY_WORKERS/$EXPECTED_WORKERS Worker nodes Ready after 10 minutes. Proceeding."
+  fi
+  sleep 5
+done
+kubectl get nodes
+log "Cluster nodes: $(kubectl get nodes --no-headers | wc -l) total"
+
 # Create Root Application (App of Apps Pattern)
 log "Creating Root Application for App of Apps Pattern..."
 cat <<EOFAPP | kubectl apply -f -
@@ -204,24 +247,6 @@ for i in $(seq 1 60); do
   fi
   if [ "$i" -eq 60 ]; then
     log "WARNING: prod-app-secrets not created after 5 minutes. ExternalSecret sync may be delayed."
-  fi
-  sleep 5
-done
-
-# PostgreSQL password 동기화
-# base Secret(placeholder)이 먼저 배포되어 PostgreSQL이 임시 password로 initdb될 수 있음
-# ExternalSecret sync 후 실제 password로 ALTER USER 수행
-log "Synchronizing PostgreSQL password with ExternalSecret..."
-for i in $(seq 1 60); do
-  if kubectl get pod prod-postgresql-0 -n titanium-prod -o jsonpath='{.status.phase}' 2>/dev/null | grep -q Running; then
-    REAL_PW=$(kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath='{.data.POSTGRES_PASSWORD}' 2>/dev/null | base64 -d)
-    if [ -n "$REAL_PW" ]; then
-      kubectl exec -n titanium-prod prod-postgresql-0 -- psql -U postgres -c "ALTER USER postgres PASSWORD '$REAL_PW'" >/dev/null 2>&1
-      log "PostgreSQL password synchronized"
-      # application Pod 재시작으로 새 password 적용
-      kubectl rollout restart deployment -n titanium-prod prod-blog-service-deployment prod-user-service-deployment >/dev/null 2>&1
-      break
-    fi
   fi
   sleep 5
 done

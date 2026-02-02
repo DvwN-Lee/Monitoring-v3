@@ -16,19 +16,9 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: titanium-prod
-  # Bootstrap script에서 생성한 Secret 값 보존
-  # ArgoCD selfHeal이 Git의 placeholder 값으로 덮어쓰지 않도록
-  # ignoreDifferences + RespectIgnoreDifferences=true 필수 조합
-  ignoreDifferences:
-    - group: ""
-      kind: Secret
-      name: prod-app-secrets
-      jsonPointers:
-        - /data
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - RespectIgnoreDifferences=true
