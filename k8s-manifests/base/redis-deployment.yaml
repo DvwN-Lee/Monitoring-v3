@@ -41,11 +41,11 @@ spec:
             cpu: "200m"
         livenessProbe:
           exec:
-            command: ["sh", "-c", "redis-cli -a $REDIS_PASSWORD ping"]
+            command: ["sh", "-c", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping"]
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           exec:
-            command: ["sh", "-c", "redis-cli -a $REDIS_PASSWORD ping"]
+            command: ["sh", "-c", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping"]
           initialDelaySeconds: 5
           periodSeconds: 5

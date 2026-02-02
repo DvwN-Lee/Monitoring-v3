@@ -122,7 +122,8 @@ upload_secret() {
   local sm_name="$1"
   local value="$2"
   echo -n "$value" | gcloud secrets versions add "$sm_name" --data-file=- 2>/dev/null || \
-    echo -n "$value" | gcloud secrets create "$sm_name" --data-file=-
+    echo -n "$value" | gcloud secrets create "$sm_name" --data-file=- || \
+    log "ERROR: Failed to upload secret $sm_name"
 }
 
 upload_secret "titanium-jwt-private-key" "$(cat "$JWT_TEMP_DIR/jwt-private.pem")"
