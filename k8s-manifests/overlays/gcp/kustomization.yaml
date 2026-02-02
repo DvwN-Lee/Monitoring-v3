@@ -59,18 +59,6 @@ patches:
       kind: Deployment
       name: auth-service-deployment
 
-  # GCP 환경에서는 ExternalSecret이 prod-app-secrets를 생성하므로
-  # base의 placeholder secret을 제거하여 race condition 방지
-  - patch: |-
-      $patch: delete
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: app-secrets
-    target:
-      kind: Secret
-      name: app-secrets
-
   # Fix VirtualService gateway reference for namePrefix compatibility
   - patch: |-
       - op: replace
