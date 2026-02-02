@@ -208,6 +208,24 @@ for i in $(seq 1 60); do
   sleep 5
 done
 
+# PostgreSQL password 동기화
+# base Secret(placeholder)이 먼저 배포되어 PostgreSQL이 임시 password로 initdb될 수 있음
+# ExternalSecret sync 후 실제 password로 ALTER USER 수행
+log "Synchronizing PostgreSQL password with ExternalSecret..."
+for i in $(seq 1 60); do
+  if kubectl get pod prod-postgresql-0 -n titanium-prod -o jsonpath='{.status.phase}' 2>/dev/null | grep -q Running; then
+    REAL_PW=$(kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath='{.data.POSTGRES_PASSWORD}' 2>/dev/null | base64 -d)
+    if [ -n "$REAL_PW" ]; then
+      kubectl exec -n titanium-prod prod-postgresql-0 -- psql -U postgres -c "ALTER USER postgres PASSWORD '$REAL_PW'" >/dev/null 2>&1
+      log "PostgreSQL password synchronized"
+      # application Pod 재시작으로 새 password 적용
+      kubectl rollout restart deployment -n titanium-prod prod-blog-service-deployment prod-user-service-deployment >/dev/null 2>&1
+      break
+    fi
+  fi
+  sleep 5
+done
+
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"
 log "Grafana UI: http://$PUBLIC_IP:$NODEPORT_GRAFANA"
