@@ -136,6 +136,11 @@ for sts in $(kubectl get statefulsets -n argocd -o jsonpath='{.items[*].metadata
 done
 log "ArgoCD toleration patching complete"
 
+# PVC health check: local-path StorageClass의 WaitForFirstConsumer에서
+# Pending 상태 PVC를 Healthy로 판단하도록 ArgoCD 설정
+log "Configuring ArgoCD PVC health check for WaitForFirstConsumer..."
+kubectl patch configmap argocd-cm -n argocd --type=merge -p='{"data":{"resource.customizations.health.PersistentVolumeClaim":"hs = {}\nif obj.status ~= nil then\n  if obj.status.phase == \"Pending\" then\n    hs.status = \"Healthy\"\n    hs.message = \"PVC is pending (WaitForFirstConsumer)\"\n  elseif obj.status.phase == \"Bound\" then\n    hs.status = \"Healthy\"\n    hs.message = obj.status.phase\n  else\n    hs.status = \"Progressing\"\n    hs.message = obj.status.phase\n  end\nelse\n  hs.status = \"Healthy\"\nend\nreturn hs"}}'
+
 # Generate JWT RS256 Key Pair for auth-service
 log "Generating JWT RS256 key pair..."
 JWT_TEMP_DIR=$(mktemp -d)

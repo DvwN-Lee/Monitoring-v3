@@ -59,6 +59,15 @@ patches:
       kind: Deployment
       name: auth-service-deployment
 
+  # Redis Secret 참조를 prod-app-secrets로 변경 (base Secret 제거 시 namePrefix 미적용 대응)
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: prod-app-secrets
+    target:
+      kind: Deployment
+      name: redis-deployment
+
   # GCP overlay에서 base Secret 제외 (ExternalSecret이 prod-app-secrets를 단독 관리)
   - patch: |-
       $patch: delete

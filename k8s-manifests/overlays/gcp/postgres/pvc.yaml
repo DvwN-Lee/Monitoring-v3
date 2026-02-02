@@ -3,6 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: postgresql-pvc
   namespace: titanium-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   accessModes:
     - ReadWriteOnce

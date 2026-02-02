@@ -42,7 +42,7 @@ spec:
               key: POSTGRES_DB
         envFrom:
         - secretRef:
-            name: app-secrets
+            name: prod-app-secrets
         volumeMounts:
         - name: postgresql-data
           mountPath: /var/lib/postgresql/data
