@@ -35,12 +35,12 @@ spec:
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: prod-app-secrets
               key: POSTGRES_USER
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: prod-app-secrets
               key: POSTGRES_PASSWORD
         - name: POSTGRES_SSLMODE
           valueFrom:
@@ -50,6 +50,6 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: prod-app-secrets
               key: REDIS_PASSWORD
         # Remove BLOG_DATABASE_PATH (SQLite)
