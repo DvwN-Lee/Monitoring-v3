@@ -59,6 +59,17 @@ patches:
       kind: Deployment
       name: auth-service-deployment
 
+  # GCP overlay에서 base Secret 제외 (ExternalSecret이 prod-app-secrets를 단독 관리)
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: app-secrets
+    target:
+      kind: Secret
+      name: app-secrets
+
   # Fix VirtualService gateway reference for namePrefix compatibility
   - patch: |-
       - op: replace
@@ -68,6 +79,64 @@ patches:
     target:
       kind: VirtualService
       name: titanium-vs
+
+  # Sync Wave: 결정론적 배포 순서 보장
+  # Wave -2: ClusterSecretStore, Wave -1: ExternalSecret, Wave 0: ConfigMap/PVC/Service
+  # Wave 1: Data Layer (PostgreSQL, Redis), Wave 2: Auth, Wave 3: Biz, Wave 4: Gateway
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "1"
+    target:
+      kind: Deployment
+      name: redis-deployment
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "2"
+    target:
+      kind: Deployment
+      name: auth-service-deployment
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "3"
+    target:
+      kind: Deployment
+      name: user-service-deployment
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "3"
+    target:
+      kind: Deployment
+      name: blog-service-deployment
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "4"
+    target:
+      kind: Deployment
+      name: api-gateway-deployment
 
   # Add Istio sidecar resource limits to all Deployments
   - patch: |-
