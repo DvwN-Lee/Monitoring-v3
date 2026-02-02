@@ -17,6 +17,7 @@ spec:
       releaseName: istio-ingressgateway
       values: |
         image:
+          repository: docker.io/istio/proxyv2
           tag: "1.24.2"
         service:
           type: NodePort
