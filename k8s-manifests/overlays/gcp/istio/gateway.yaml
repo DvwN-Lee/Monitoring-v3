@@ -45,6 +45,17 @@ spec:
         host: prod-blog-service
         port:
           number: 8005
+  # User service health check (rewrite 예외: /api/users/health -> /health)
+  - match:
+    - uri:
+        exact: /api/users/health
+    route:
+    - destination:
+        host: prod-user-service
+        port:
+          number: 8001
+    rewrite:
+      uri: /health
   # User service routes (direct routing)
   - match:
     - uri:
