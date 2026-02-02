@@ -226,6 +226,23 @@ for i in $(seq 1 60); do
   sleep 5
 done
 
+# Istio Gateway sidecar injection 확인
+# istiod webhook 등록 전에 gateway Pod가 생성되면 image가 'auto'로 남음
+log "Verifying Istio Gateway sidecar injection..."
+for i in $(seq 1 30); do
+  GW_IMAGE=$(kubectl get pod -n istio-system -l app=istio-ingressgateway -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)
+  if [ "$GW_IMAGE" = "auto" ] || echo "$GW_IMAGE" | grep -q "auto"; then
+    log "Gateway image is 'auto' (attempt $i), restarting for injection..."
+    kubectl delete pod -n istio-system -l app=istio-ingressgateway >/dev/null 2>&1
+    sleep 10
+  elif [ -n "$GW_IMAGE" ]; then
+    log "Gateway image verified: $GW_IMAGE"
+    break
+  else
+    sleep 5
+  fi
+done
+
 log "Bootstrap complete!"
 log "ArgoCD UI: http://$PUBLIC_IP:$NODEPORT_ARGOCD"
 log "Grafana UI: http://$PUBLIC_IP:$NODEPORT_GRAFANA"
