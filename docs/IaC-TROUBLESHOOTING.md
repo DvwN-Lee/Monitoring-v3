@@ -13,6 +13,7 @@ K3s + ArgoCD + GitOps 기반 인프라 배포 중 발생한 문제와 해결 방
 7. [ArgoCD PVC Health Check 실패](#7-argocd-pvc-health-check-실패)
 8. [Kustomize namePrefix Secret 참조 오류](#8-kustomize-nameprefix-secret-참조-오류)
 9. [Redis Password 미설정](#9-redis-password-미설정)
+10. [Traffic Generator NetworkPolicy 차단](#10-traffic-generator-networkpolicy-차단)
 
 ---
 
@@ -516,6 +517,124 @@ NOAUTH Authentication required.
 Password 없이 접근 시 `NOAUTH Authentication required.` 에러가 반환되어 인증이 정상 설정됨.
 
 **Commit**: `7545c58`
+
+---
+
+## 10. Traffic Generator NetworkPolicy 차단
+
+### 문제
+
+```
+=== Traffic Generator Start ===
+[1/7] API Gateway health check
+HTTP 503
+[2/7] User registration: trafficbot_1770094384
+HTTP 503
+[5/7] Blog posts list
+HTTP 503
+```
+
+Traffic Generator CronJob이 모든 서비스에서 HTTP 503 응답을 받음.
+
+### 원인
+
+Zero Trust NetworkPolicy 모델에서 `traffic-generator` Pod가 허용 목록에 포함되지 않음.
+
+각 서비스의 NetworkPolicy ingress 규칙에 허용된 소스:
+- `istio-system` namespace의 `istio-ingressgateway`
+- `monitoring` namespace (Prometheus scraping)
+- 동일 namespace 내 특정 서비스 (예: `api-gateway` -> `auth-service`)
+
+`traffic-generator`는 위 목록에 없어 모든 서비스 접근이 차단됨.
+
+### 해결
+
+**파일**: `k8s-manifests/overlays/gcp/network-policies.yaml`
+
+**1. 각 서비스 ingress에 traffic-generator 추가:**
+
+```yaml
+# api-gateway-network-policy ingress 추가
+- from:
+    - podSelector:
+        matchLabels:
+          app: traffic-generator
+  ports:
+    - protocol: TCP
+      port: 8000
+```
+
+동일한 패턴을 `user-service`, `auth-service`, `blog-service`에도 적용.
+
+**2. traffic-generator 전용 NetworkPolicy 추가:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traffic-generator-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: traffic-generator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: user-service
+      ports:
+        - protocol: TCP
+          port: 8001
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-service
+      ports:
+        - protocol: TCP
+          port: 8002
+    - to:
+        - podSelector:
+            matchLabels:
+              app: blog-service
+      ports:
+        - protocol: TCP
+          port: 8005
+    # Istiod, DNS 허용 규칙 포함
+```
+
+### 검증
+
+```bash
+$ kubectl get networkpolicy -n titanium-prod | grep traffic
+prod-traffic-generator-network-policy   app=traffic-generator   1m
+
+$ kubectl logs -n titanium-prod -l app=traffic-generator --tail=15
+=== Traffic Generator Start ===
+[1/7] API Gateway health check
+HTTP 200
+[2/7] User registration: trafficbot_1770094743
+HTTP 422
+[5/7] Blog posts list
+HTTP 200
+[7/7] Blog categories
+HTTP 200
+=== Traffic Generator Complete ===
+```
+
+Traffic generator가 HTTP 200 응답을 정상 수신. HTTP 422는 user registration validation 오류로 NetworkPolicy와 무관.
+
+**Commit**: `5a1de85`
 
 ---
 
