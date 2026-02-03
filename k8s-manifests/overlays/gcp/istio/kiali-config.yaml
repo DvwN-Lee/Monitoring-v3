@@ -38,7 +38,7 @@ data:
         - istio-ca-secret
       clustering:
         autodetect_secrets:
-          enabled: true
+          enabled: false
           label: kiali.io/multiCluster=true
         clusters: []
       disabled_features: []
