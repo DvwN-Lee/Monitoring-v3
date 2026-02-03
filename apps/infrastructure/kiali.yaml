@@ -26,7 +26,8 @@ spec:
         clustering:
           autodetect_secrets:
             enabled: false
-          clusters: []
+          clusters:
+          - name: Kubernetes
         external_services:
           istio:
             root_namespace: istio-system
