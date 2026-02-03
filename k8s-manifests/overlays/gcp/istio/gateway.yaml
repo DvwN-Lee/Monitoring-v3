@@ -78,6 +78,17 @@ spec:
           number: 8002
     rewrite:
       uri: /login
+  # Auth service health check (rewrite 예외: /api/auth/health -> /health)
+  - match:
+    - uri:
+        exact: /api/auth/health
+    route:
+    - destination:
+        host: prod-auth-service
+        port:
+          number: 8002
+    rewrite:
+      uri: /health
   # Auth service routes (direct routing)
   - match:
     - uri:
