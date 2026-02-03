@@ -23,8 +23,8 @@ spec:
           node_port: 31200
         auth:
           strategy: anonymous
-        clustering:
-          autodetect_secrets:
+        kiali_feature_flags:
+          clustering:
             enabled: false
         external_services:
           istio:
