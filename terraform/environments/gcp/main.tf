@@ -8,7 +8,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.0"
+      version = "~> 5.44"
     }
     random = {
       source  = "hashicorp/random"
@@ -158,7 +158,7 @@ resource "google_compute_firewall" "allow_dashboards" {
 
   allow {
     protocol = "tcp"
-    ports    = ["80", "443", "30000-32767"]
+    ports    = ["80", "443", "30080", "31080", "31090", "31200", "31300", "31443"]
   }
 
   # Auto-detected current IP + additional admin CIDRs
@@ -232,6 +232,7 @@ resource "google_compute_instance" "k3s_master" {
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-server.sh", {
+    k3s_version            = var.k3s_version
     k3s_token              = random_password.k3s_token.result
     postgres_password      = var.postgres_password
     grafana_admin_password = var.grafana_admin_password
@@ -239,6 +240,7 @@ resource "google_compute_instance" "k3s_master" {
     gitops_target_revision = var.gitops_target_revision
     helm_versions          = var.helm_versions
     nodeports              = var.nodeports
+    worker_count           = var.worker_count
   })
 
   service_account {

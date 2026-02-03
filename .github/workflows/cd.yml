@@ -64,39 +64,35 @@ jobs:
           echo "Changed services: $SERVICES"
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
 
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
       - name: Update kustomization.yaml
         if: steps.changes.outputs.services != ''
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short_sha }}
+          SERVICES: ${{ steps.changes.outputs.services }}
         run: |
-          SHORT_SHA=${{ steps.sha.outputs.short_sha }}
-          SERVICES="${{ steps.changes.outputs.services }}"
-
           echo "Updating image tags for services: $SERVICES"
 
-          # kustomization.yaml 파일 경로
-          KUSTOMIZE_FILE="k8s-manifests/overlays/gcp/kustomization.yaml"
+          cd k8s-manifests/overlays/gcp
 
-          # 각 Service의 이미지 태그 업데이트
+          # kustomize edit set image로 각 Service의 이미지 태그 업데이트
           for service in $SERVICES; do
             echo "Updating $service to tag: main-$SHORT_SHA"
-
-            # yq 없이 sed를 사용하여 업데이트
-            # images 섹션에서 해당 Service의 newTag를 업데이트
-            sed -i.bak "/name: $DOCKER_HUB_USERNAME\/$service/,/newTag:/ s/newTag:.*/newTag: main-$SHORT_SHA/" $KUSTOMIZE_FILE
+            kustomize edit set image "$DOCKER_HUB_USERNAME/$service=$DOCKER_HUB_USERNAME/$service:main-$SHORT_SHA"
           done
-
-          # 백업 파일 삭제
-          rm -f ${KUSTOMIZE_FILE}.bak
 
           # 변경사항 확인
           echo "Updated kustomization.yaml:"
-          cat $KUSTOMIZE_FILE
+          cat kustomization.yaml
 
       - name: Commit and push changes
         if: steps.changes.outputs.services != ''
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short_sha }}
+          SERVICES: ${{ steps.changes.outputs.services }}
         run: |
-          SHORT_SHA=${{ steps.sha.outputs.short_sha }}
-          SERVICES="${{ steps.changes.outputs.services }}"
-
           # 변경사항이 있는지 확인
           if git diff --quiet; then
             echo "No changes to commit"
@@ -113,7 +109,19 @@ jobs:
 
           [skip ci]"
 
-          git push origin main
+          # Retry loop: pull --rebase 후 push (최대 3회)
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "Push succeeded (attempt $attempt)"
+              break
+            fi
+            echo "Push failed (attempt $attempt), pulling with rebase..."
+            git pull --rebase origin main
+            if [ "$attempt" -eq 3 ]; then
+              echo "ERROR: Push failed after 3 attempts"
+              exit 1
+            fi
+          done
 
       - name: Summary
         if: steps.changes.outputs.services != ''

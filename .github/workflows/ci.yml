@@ -159,7 +159,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         with:
           image-ref: ${{ env.DOCKER_HUB_USERNAME }}/${{ matrix.service }}:test
           format: 'sarif'
@@ -175,7 +175,7 @@ jobs:
           category: 'trivy-${{ matrix.service }}'
 
       - name: Run Trivy vulnerability scanner (JSON output for PR comment)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         if: github.event_name == 'pull_request'
         with:
           image-ref: ${{ env.DOCKER_HUB_USERNAME }}/${{ matrix.service }}:test

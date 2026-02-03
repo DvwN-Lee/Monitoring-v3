@@ -54,3 +54,38 @@ config-*
 # Kubernetes Secrets (민감 정보 보호)
 secret-patch.yaml
 **/secret-patch.yaml
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Serena
+.serena/
+
+# macOS duplicate files
+* 2.*
+* 3.*
+* 4.*
+*\ 2
+*\ 3
+*\ 4
+
+# Test screenshots
+tests/**/screenshots/
+**/screenshots/*.png
+
+# Playwright test
+playwright-report/
+test-results/
+playwright.config.ts
