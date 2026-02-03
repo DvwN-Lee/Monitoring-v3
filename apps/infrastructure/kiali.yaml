@@ -23,9 +23,10 @@ spec:
           node_port: 31200
         auth:
           strategy: anonymous
-        kiali_feature_flags:
-          clustering:
+        clustering:
+          autodetect_secrets:
             enabled: false
+          clusters: []
         external_services:
           istio:
             root_namespace: istio-system
