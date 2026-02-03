@@ -22,29 +22,42 @@ Titanium은 GCP 기반 Kubernetes(K3s) 환경에서 운영되는 Microservice �
 
 ## 시스템 아키텍처
 
-```
-                                    ┌─────────────────────────────────────────────────────────────┐
-                                    │                    Google Cloud Platform                     │
-                                    │  ┌─────────────────────────────────────────────────────────┐│
-                                    │  │                     VPC Network                         ││
-                                    │  │                                                         ││
-┌──────────┐    HTTPS/443          │  │  ┌─────────────┐    ┌─────────────────────────────────┐││
-│  Client  │◄──────────────────────┼──┼──│   GCP LB    │────│      K3s Cluster (3 Nodes)      │││
-└──────────┘    (External IP)      │  │  │  (TCP Proxy)│    │                                 │││
-                                    │  │  └─────────────┘    │  ┌─────────────────────────┐   │││
-                                    │  │                      │  │   Istio IngressGateway  │   │││
-                                    │  │                      │  │   (NodePort 31080/31443)│   │││
-                                    │  │                      │  └───────────┬─────────────┘   │││
-                                    │  │                      │              │                 │││
-                                    │  │                      │  ┌───────────▼─────────────┐   │││
-                                    │  │                      │  │   titanium-prod NS      │   │││
-                                    │  │                      │  │  ┌─────────────────┐    │   │││
-                                    │  │                      │  │  │  Microservices  │    │   │││
-                                    │  │                      │  │  └─────────────────┘    │   │││
-                                    │  │                      │  └─────────────────────────┘   │││
-                                    │  │                      └─────────────────────────────────┘││
-                                    │  └─────────────────────────────────────────────────────────┘│
-                                    └─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Internet
+        Client[Client]
+    end
+
+    subgraph GCP["Google Cloud Platform"]
+        subgraph VPC["VPC Network"]
+            LB[GCP Load Balancer<br/>TCP Proxy]
+
+            subgraph K3s["K3s Cluster"]
+                subgraph istio-system["istio-system NS"]
+                    IGW[Istio IngressGateway<br/>NodePort 31080/31443]
+                end
+
+                subgraph titanium-prod["titanium-prod NS"]
+                    Services[Microservices]
+                end
+
+                subgraph monitoring["monitoring NS"]
+                    Mon[Prometheus + Loki + Grafana]
+                end
+
+                subgraph argocd-ns["argocd NS"]
+                    ArgoCD[ArgoCD]
+                end
+            end
+        end
+
+        SM[GCP Secret Manager]
+    end
+
+    Client -->|HTTPS/443| LB
+    LB -->|NodePort| IGW
+    IGW --> Services
+    SM -.->|External Secrets| Services
 ```
 
 ---
@@ -53,22 +66,36 @@ Titanium은 GCP 기반 Kubernetes(K3s) 환경에서 운영되는 Microservice �
 
 ### GCP 리소스 구성
 
-```
-GCP Project
-├── VPC Network (titanium-vpc)
-│   ├── Subnet (10.0.1.0/24)
-│   └── Firewall Rules
-│       ├── allow-internal (내부 통신)
-│       ├── allow-ssh (관리자 접근)
-│       ├── allow-k3s-api (6443)
-│       └── allow-nodeport (30000-32767)
-├── Compute Engine
-│   ├── k3s-server (Control Plane)
-│   └── k3s-agent-* (Worker Nodes, MIG)
-├── Cloud Load Balancer
-│   └── TCP Proxy (80, 443 → NodePort)
-└── Secret Manager
-    └── titanium-secrets (Application Secrets)
+```mermaid
+flowchart TB
+    subgraph GCP["GCP Project"]
+        subgraph VPC["VPC Network (titanium-vpc)"]
+            Subnet["Subnet<br/>10.0.1.0/24"]
+
+            subgraph FW["Firewall Rules"]
+                FW1[allow-internal]
+                FW2[allow-ssh]
+                FW3[allow-k3s-api :6443]
+                FW4[allow-nodeport :30000-32767]
+            end
+        end
+
+        subgraph Compute["Compute Engine"]
+            Server["k3s-server<br/>(Control Plane)"]
+            Agent1["k3s-agent-1<br/>(Worker)"]
+            Agent2["k3s-agent-2<br/>(Worker)"]
+        end
+
+        LB["Cloud Load Balancer"]
+        SM["Secret Manager<br/>titanium-secrets"]
+    end
+
+    Subnet --> Server
+    Subnet --> Agent1
+    Subnet --> Agent2
+    LB --> Server
+    LB --> Agent1
+    LB --> Agent2
 ```
 
 ### K3s Cluster 구성
@@ -78,11 +105,22 @@ GCP Project
 | Server (Control Plane) | e2-medium (2 vCPU, 4GB) | 1 |
 | Agent (Worker) | e2-medium (2 vCPU, 4GB) | 2 |
 
-Bootstrap 자동화:
-1. Terraform이 VM 생성
-2. `k3s-server.sh` 스크립트로 K3s 설치
-3. ArgoCD 자동 설치 및 Root Application 등록
-4. ArgoCD가 나머지 Infrastructure/Application 동기화
+### Bootstrap 자동화 흐름
+
+```mermaid
+sequenceDiagram
+    participant TF as Terraform
+    participant VM as GCP VM
+    participant K3s as K3s Cluster
+    participant Argo as ArgoCD
+
+    TF->>VM: 1. VM 생성
+    VM->>K3s: 2. k3s-server.sh 실행
+    K3s->>K3s: 3. K3s 설치
+    K3s->>Argo: 4. ArgoCD 설치
+    Argo->>Argo: 5. Root App 등록
+    Argo->>K3s: 6. Infrastructure/App 동기화
+```
 
 ---
 
@@ -90,27 +128,46 @@ Bootstrap 자동화:
 
 ### Microservice 구성
 
-```
-                    ┌─────────────────────────────────────────────────────────────┐
-                    │                     titanium-prod Namespace                  │
-                    │                                                              │
-                    │  ┌──────────────┐                                           │
-                    │  │ api-gateway  │◄───── /api/* (fallback)                   │
-                    │  │   (Go:8000)  │                                           │
-                    │  └──────┬───────┘                                           │
-                    │         │                                                    │
-                    │         ▼                                                    │
-                    │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-        /api/users  │  │ user-service │  │ auth-service │  │ blog-service │       │
-        ──────────────►│ (Python:8001)│  │ (Python:8002)│◄─│ (Python:8005)│◄── /blog
-                    │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘       │
-                    │         │                 │                 │               │
-                    │         ▼                 ▼                 ▼               │
-                    │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-                    │  │  PostgreSQL  │  │    Redis     │  │  PostgreSQL  │       │
-                    │  │    (5432)    │  │   (6379)     │  │    (5432)    │       │
-                    │  └──────────────┘  └──────────────┘  └──────────────┘       │
-                    └─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph External
+        Client[Client]
+    end
+
+    subgraph istio-system
+        IGW[Istio IngressGateway]
+    end
+
+    subgraph titanium-prod["titanium-prod Namespace"]
+        subgraph Services["Application Services"]
+            API[api-gateway<br/>Go :8000]
+            Auth[auth-service<br/>Python :8002]
+            User[user-service<br/>Python :8001]
+            Blog[blog-service<br/>Python :8005]
+        end
+
+        subgraph Data["Data Stores"]
+            PG[(PostgreSQL<br/>:5432)]
+            Redis[(Redis<br/>:6379)]
+        end
+    end
+
+    Client --> IGW
+    IGW -->|/api/*| API
+    IGW -->|/api/users| User
+    IGW -->|/api/login, /api/auth| Auth
+    IGW -->|/blog, /| Blog
+
+    API --> Auth
+    API --> User
+    API --> Blog
+
+    Auth --> User
+    Auth --> Redis
+    Blog --> Auth
+    Blog --> PG
+    User --> PG
+    User --> Redis
 ```
 
 ### Service 상세
@@ -141,34 +198,36 @@ Bootstrap 자동화:
 
 ### App of Apps 패턴
 
-```
-                    ┌─────────────────────────────────────────┐
-                    │              ArgoCD (argocd NS)          │
-                    │                                          │
-                    │  ┌────────────────────────────────────┐ │
-                    │  │         root-app (App of Apps)      │ │
-                    │  └─────────────────┬──────────────────┘ │
-                    │                    │                     │
-                    │       ┌────────────┼────────────┐       │
-                    │       ▼            ▼            ▼       │
-                    │  ┌─────────┐ ┌──────────┐ ┌─────────┐  │
-                    │  │infra-app│ │ app-app  │ │ ...     │  │
-                    │  └────┬────┘ └────┬─────┘ └─────────┘  │
-                    │       │           │                     │
-                    └───────┼───────────┼─────────────────────┘
-                            │           │
-              ┌─────────────┘           └─────────────┐
-              ▼                                       ▼
-    ┌─────────────────────┐                ┌─────────────────────┐
-    │ apps/infrastructure │                │ apps/applications   │
-    │  - istiod           │                │  - titanium-prod    │
-    │  - istio-gateway    │                └─────────────────────┘
-    │  - argocd           │                          │
-    │  - prometheus       │                          ▼
-    │  - loki-stack       │                ┌─────────────────────┐
-    │  - external-secrets │                │k8s-manifests/overlays│
-    └─────────────────────┘                │  /gcp                │
-                                           └─────────────────────┘
+```mermaid
+flowchart TB
+    subgraph ArgoCD["ArgoCD (argocd NS)"]
+        Root[root-app<br/>App of Apps]
+
+        subgraph InfraApps["Infrastructure Apps"]
+            Istiod[istiod]
+            Gateway[istio-ingressgateway]
+            Prom[prometheus]
+            Loki[loki-stack]
+            ESO[external-secrets]
+        end
+
+        subgraph AppApps["Application Apps"]
+            Titanium[titanium-prod]
+        end
+    end
+
+    subgraph GitHub["GitHub Repository"]
+        AppsInfra["apps/infrastructure/"]
+        AppsApp["apps/applications/"]
+        K8sManifests["k8s-manifests/overlays/gcp/"]
+    end
+
+    Root --> InfraApps
+    Root --> AppApps
+
+    InfraApps -.->|sync| AppsInfra
+    AppApps -.->|sync| AppsApp
+    Titanium -.->|sync| K8sManifests
 ```
 
 ### 디렉토리 구조
@@ -190,40 +249,36 @@ Monitoring-v3/
 │   ├── base/                      # 공통 리소스
 │   └── overlays/
 │       └── gcp/                   # GCP 환경 Overlay
-│           ├── kustomization.yaml
-│           ├── network-policies.yaml
-│           ├── istio/
-│           ├── postgres/
-│           └── external-secrets/
 └── terraform/                     # Infrastructure as Code
     └── environments/
         └── gcp/
-            ├── main.tf
-            ├── mig.tf
-            ├── variables.tf
-            └── scripts/
 ```
 
 ### CI/CD 파이프라인
 
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Developer   │────►│   GitHub     │────►│GitHub Actions│────►│    GHCR      │
-│  git push    │     │  Repository  │     │  CI Pipeline │     │ Container    │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────┬───────┘
-                            │                                         │
-                            │ Webhook                                 │
-                            ▼                                         │
-                     ┌──────────────┐                                 │
-                     │   ArgoCD     │◄────────────────────────────────┘
-                     │  (GitOps)    │     Image Pull
-                     └──────┬───────┘
-                            │
-                            │ Sync
-                            ▼
-                     ┌──────────────┐
-                     │  K3s Cluster │
-                     └──────────────┘
+```mermaid
+flowchart LR
+    subgraph Dev["Development"]
+        Developer[Developer]
+    end
+
+    subgraph GitHub
+        Repo[Repository]
+        Actions[GitHub Actions<br/>CI Pipeline]
+        GHCR[GHCR<br/>Container Registry]
+    end
+
+    subgraph K3s["K3s Cluster"]
+        ArgoCD[ArgoCD<br/>GitOps]
+        Pods[Application Pods]
+    end
+
+    Developer -->|git push| Repo
+    Repo -->|trigger| Actions
+    Actions -->|push image| GHCR
+    Repo -->|webhook| ArgoCD
+    GHCR -->|pull image| Pods
+    ArgoCD -->|sync| Pods
 ```
 
 ---
@@ -234,26 +289,63 @@ Monitoring-v3/
 
 모든 Pod에 기본 Deny 정책 적용 후, 필요한 통신만 명시적 허용.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           titanium-prod Namespace                            │
-│                                                                              │
-│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐                 │
-│  │ api-gateway │─────►│ auth-service│─────►│ user-service│                 │
-│  │             │─────►│             │      │             │                 │
-│  │             │─────►│ blog-service│      └──────┬──────┘                 │
-│  └──────▲──────┘      └──────┬──────┘             │                        │
-│         │                    │                     │                        │
-│  Istio  │                    ▼                     ▼                        │
-│  Ingress│             ┌─────────────┐      ┌─────────────┐                 │
-│  Gateway│             │    Redis    │      │ PostgreSQL  │                 │
-│         │             └─────────────┘      └─────────────┘                 │
-└─────────┼───────────────────────────────────────────────────────────────────┘
-          │
-    ┌─────┴─────┐
-    │istio-system│
-    │ Namespace  │
-    └───────────┘
+```mermaid
+flowchart TB
+    subgraph istio-system
+        IGW[Istio IngressGateway]
+        Istiod[Istiod]
+    end
+
+    subgraph monitoring
+        Prom[Prometheus]
+    end
+
+    subgraph kube-system
+        DNS[kube-dns :53]
+    end
+
+    subgraph titanium-prod["titanium-prod Namespace"]
+        API[api-gateway :8000]
+        Auth[auth-service :8002]
+        User[user-service :8001]
+        Blog[blog-service :8005]
+        PG[(PostgreSQL :5432)]
+        Redis[(Redis :6379)]
+    end
+
+    IGW -->|허용| API
+    IGW -->|허용| Auth
+    IGW -->|허용| User
+    IGW -->|허용| Blog
+
+    API -->|허용| Auth
+    API -->|허용| User
+    API -->|허용| Blog
+
+    Auth -->|허용| User
+    Auth -->|허용| Redis
+
+    Blog -->|허용| Auth
+    Blog -->|허용| PG
+    Blog -->|허용| Redis
+
+    User -->|허용| PG
+    User -->|허용| Redis
+
+    Prom -.->|scrape| API
+    Prom -.->|scrape| Auth
+    Prom -.->|scrape| User
+    Prom -.->|scrape| Blog
+
+    API -.->|DNS| DNS
+    Auth -.->|DNS| DNS
+    User -.->|DNS| DNS
+    Blog -.->|DNS| DNS
+
+    API -.->|xDS| Istiod
+    Auth -.->|xDS| Istiod
+    User -.->|xDS| Istiod
+    Blog -.->|xDS| Istiod
 ```
 
 ### 허용된 통신 경로
@@ -275,36 +367,41 @@ Monitoring-v3/
 
 ### Monitoring Stack
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          monitoring Namespace                                │
-│                                                                              │
-│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐                 │
-│  │ Prometheus  │◄─────│ServiceMonitor│     │  Grafana    │                 │
-│  │             │      │  (autodiscovery)   │  Dashboard  │                 │
-│  └──────┬──────┘      └─────────────┘      └──────▲──────┘                 │
-│         │                                         │                        │
-│         │ Remote Write                            │ Query                  │
-│         ▼                                         │                        │
-│  ┌─────────────┐                           ┌──────┴──────┐                 │
-│  │    Loki     │◄──────────────────────────│   LogQL     │                 │
-│  │  (Log Store)│      Promtail             │   PromQL    │                 │
-│  └─────────────┘                           └─────────────┘                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-          ▲
-          │ Scrape (ServiceMonitor)
-          │
-┌─────────┴───────────────────────────────────────────────────────────────────┐
-│                          titanium-prod Namespace                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ api-gateway │  │ auth-service│  │ user-service│  │ blog-service│        │
-│  │  /metrics   │  │  /metrics   │  │  /metrics   │  │  /metrics   │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
-│                                                                              │
-│  ┌─────────────┐  Envoy Sidecar (Istio)                                    │
-│  │ :15090/stats│  모든 Pod에서 메트릭 노출                                   │
-│  └─────────────┘                                                            │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph titanium-prod["titanium-prod Namespace"]
+        subgraph Pods["Application Pods"]
+            App1[api-gateway<br/>/metrics]
+            App2[auth-service<br/>/metrics]
+            App3[user-service<br/>/metrics]
+            App4[blog-service<br/>/metrics]
+        end
+
+        subgraph Sidecars["Envoy Sidecars"]
+            Envoy[:15090/stats]
+        end
+    end
+
+    subgraph monitoring["monitoring Namespace"]
+        SM[ServiceMonitor<br/>autodiscovery]
+        Prom[Prometheus]
+        Loki[Loki]
+        Promtail[Promtail]
+        Grafana[Grafana<br/>Dashboard]
+    end
+
+    App1 --> SM
+    App2 --> SM
+    App3 --> SM
+    App4 --> SM
+    Envoy --> SM
+    SM --> Prom
+
+    Pods -->|logs| Promtail
+    Promtail --> Loki
+
+    Prom -->|PromQL| Grafana
+    Loki -->|LogQL| Grafana
 ```
 
 ### 수집 메트릭
@@ -333,19 +430,49 @@ Monitoring-v3/
 
 ### Secret 관리 흐름
 
+```mermaid
+flowchart LR
+    subgraph GCP
+        SM[GCP Secret Manager<br/>titanium-secrets]
+    end
+
+    subgraph K3s["K3s Cluster"]
+        ESO[External Secrets<br/>Operator]
+        ES[ExternalSecret CR]
+        Secret[Kubernetes Secret<br/>prod-app-secrets]
+        Pod[Application Pod]
+    end
+
+    SM -->|fetch| ESO
+    ES -->|define mapping| ESO
+    ESO -->|create| Secret
+    Secret -->|envFrom| Pod
 ```
-┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
-│  GCP Secret      │      │ External Secrets │      │   Kubernetes     │
-│  Manager         │─────►│ Operator         │─────►│   Secret         │
-│                  │      │                  │      │                  │
-│ titanium-secrets │      │ ExternalSecret CR│      │ prod-app-secrets │
-└──────────────────┘      └──────────────────┘      └────────┬─────────┘
-                                                              │
-                                                              ▼
-                                                    ┌──────────────────┐
-                                                    │   Application    │
-                                                    │   Pod (envFrom)  │
-                                                    └──────────────────┘
+
+### mTLS 통신
+
+```mermaid
+flowchart LR
+    subgraph Pod1["Pod A"]
+        App1[Application]
+        Envoy1[Envoy Sidecar]
+    end
+
+    subgraph Pod2["Pod B"]
+        Envoy2[Envoy Sidecar]
+        App2[Application]
+    end
+
+    subgraph istio-system
+        Istiod[Istiod<br/>Certificate Authority]
+    end
+
+    App1 -->|plaintext| Envoy1
+    Envoy1 <-->|mTLS| Envoy2
+    Envoy2 -->|plaintext| App2
+
+    Istiod -.->|issue cert| Envoy1
+    Istiod -.->|issue cert| Envoy2
 ```
 
 ---
