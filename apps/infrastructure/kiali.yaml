@@ -20,7 +20,7 @@ spec:
           namespace: istio-system
           service_type: NodePort
           pod_annotations:
-            traffic.sidecar.istio.io/excludeOutboundIPRanges: "10.43.0.1/32"
+            traffic.sidecar.istio.io/excludeOutboundIPRanges: "10.43.0.1/32,10.43.224.185/32"
         server:
           node_port: 31200
         auth:
