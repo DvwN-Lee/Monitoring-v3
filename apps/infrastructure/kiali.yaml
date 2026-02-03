@@ -23,6 +23,8 @@ spec:
           node_port: 31200
         auth:
           strategy: anonymous
+        kubernetes_config:
+          cluster_name: Kubernetes
         clustering:
           autodetect_secrets:
             enabled: false
@@ -33,6 +35,7 @@ spec:
             root_namespace: istio-system
             config_map_name: istio
             istio_sidecar_injector_config_map_name: istio-sidecar-injector
+            istio_api_enabled: true
           prometheus:
             url: http://prometheus-kube-prometheus-prometheus.monitoring:9090/prometheus
           grafana:
