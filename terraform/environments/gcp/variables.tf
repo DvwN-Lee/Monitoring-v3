@@ -44,7 +44,7 @@ variable "worker_machine_type" {
 variable "worker_count" {
   description = "Number of worker nodes"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "use_spot_for_workers" {
@@ -105,6 +105,13 @@ variable "environment" {
   description = "Environment name (e.g., dev, staging, prod)"
   type        = string
   default     = "prod"
+}
+
+# k3s Configuration
+variable "k3s_version" {
+  description = "k3s version to install (e.g., v1.31.4+k3s1)"
+  type        = string
+  default     = "v1.31.4+k3s1"
 }
 
 # GitOps Configuration

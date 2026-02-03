@@ -49,8 +49,9 @@ resource "google_compute_instance_template" "k3s_worker" {
   }
 
   metadata_startup_script = templatefile("${path.module}/scripts/k3s-agent.sh", {
-    master_ip = google_compute_instance.k3s_master.network_interface[0].network_ip
-    k3s_token = random_password.k3s_token.result
+    master_ip   = google_compute_instance.k3s_master.network_interface[0].network_ip
+    k3s_token   = random_password.k3s_token.result
+    k3s_version = var.k3s_version
   })
 
   service_account {
