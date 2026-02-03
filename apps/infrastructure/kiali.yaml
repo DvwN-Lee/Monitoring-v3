@@ -32,7 +32,7 @@ spec:
             config_map_name: istio
             istio_sidecar_injector_config_map_name: istio-sidecar-injector
           prometheus:
-            url: http://prometheus-kube-prometheus-prometheus.monitoring:9090
+            url: http://prometheus-kube-prometheus-prometheus.monitoring:9090/prometheus
           grafana:
             enabled: true
             url: http://prometheus-grafana.monitoring:80
