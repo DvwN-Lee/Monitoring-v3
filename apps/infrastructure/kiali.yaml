@@ -23,6 +23,9 @@ spec:
           node_port: 31200
         auth:
           strategy: anonymous
+        clustering:
+          autodetect_secrets:
+            enabled: false
         external_services:
           istio:
             root_namespace: istio-system
