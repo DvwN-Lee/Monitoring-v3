@@ -1,0 +1,33 @@
+# Production Environment Configuration
+
+# GCP Project Configuration
+project_id = "your-prod-project-id"
+region     = "asia-northeast3"
+zone       = "asia-northeast3-a"
+
+# Cluster Configuration (production scale)
+cluster_name = "titanium-k3s-prod"
+worker_count = 3
+
+# Network Configuration
+subnet_cidr = "10.128.0.0/20"
+
+# Instance Configuration (production stability)
+master_machine_type = "e2-medium"
+worker_machine_type = "e2-standard-2"
+os_image            = "ubuntu-os-cloud/ubuntu-2204-lts"
+
+# Spot VM Configuration (disable for production)
+use_spot_for_workers = false
+
+# Disk Configuration (production capacity)
+master_disk_size = 50
+worker_disk_size = 100
+
+# SSH Configuration
+ssh_public_key_path = "~/.ssh/titanium-prod-key.pub"
+
+# Admin Access Configuration
+# Example: Office network and VPN
+# additional_admin_cidrs = ["203.0.113.0/24", "198.51.100.0/24"]
+additional_admin_cidrs = []
