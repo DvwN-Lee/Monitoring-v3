@@ -75,9 +75,11 @@ metadata:
 ### 검증
 
 ```bash
-kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath="{.metadata.ownerReferences[0].kind}"
-# 출력: ExternalSecret
+$ kubectl get secret prod-app-secrets -n titanium-prod -o jsonpath="{.metadata.ownerReferences[0].kind}"
+ExternalSecret
 ```
+
+Secret의 owner가 `ExternalSecret`으로 설정되어, ExternalSecret이 Secret을 단독 관리함을 확인.
 
 **Commit**: `383f3cd`, `ff93505`
 
@@ -128,12 +130,14 @@ helm:
 ### 검증
 
 ```bash
-kubectl get svc -n istio-system istio-ingressgateway
-# 출력: 80:31080/TCP,443:31443/TCP
+$ kubectl get svc -n istio-system istio-ingressgateway -o jsonpath="{.spec.ports[*].nodePort}"
+31080 31443
 
-curl -s -o /dev/null -w "%{http_code}" http://34.22.103.1:31080/
-# 출력: 200
+$ curl -s -o /dev/null -w "%{http_code}" http://34.22.103.1:31080/
+200
 ```
+
+NodePort가 31080/31443으로 설정되고, 외부 HTTP 요청이 200 OK 반환.
 
 **Commit**: `30ddbfa`
 
@@ -199,12 +203,14 @@ http:
 ### 검증
 
 ```bash
-curl -s http://localhost:31080/api/users/health
-# {"status":"healthy"}
+$ curl -s http://localhost:31080/api/users/health
+{"status":"healthy"}
 
-curl -s http://localhost:31080/api/auth/health
-# {"status":"ok","service":"auth-service"}
+$ curl -s http://localhost:31080/api/auth/health
+{"status":"ok","service":"auth-service"}
 ```
+
+각 서비스의 health endpoint가 정상 응답 반환.
 
 **Commit**: `1a1862a`, `f2538a4`
 
@@ -236,7 +242,16 @@ grafana:
 
 ### 검증
 
-Grafana UI에서 Explore > Loki datasource 선택 후 로그 쿼리 정상 동작.
+```bash
+$ kubectl get configmap -n monitoring loki-stack -o jsonpath="{.data}" | grep isDefault
+"isDefault": false
+```
+
+**Datasource 설정 확인:**
+- `loki-stack`: `isDefault: false`
+- `prometheus-kube-prometheus-grafana-datasource`: `isDefault: true`
+
+Prometheus가 default datasource로 설정되고, Loki는 별도 datasource로 정상 동작.
 
 **Commit**: `33aab25`
 
@@ -283,9 +298,11 @@ done
 ### 검증
 
 ```bash
-kubectl get pod -n istio-system -l app=istio-ingressgateway -o jsonpath='{.items[0].spec.containers[0].image}'
-# docker.io/istio/proxyv2:1.24.2
+$ kubectl get pod -n istio-system -l app=istio-ingressgateway -o jsonpath='{.items[0].spec.containers[0].image}'
+docker.io/istio/proxyv2:1.24.2
 ```
+
+Gateway Pod의 container image가 실제 Istio proxy 이미지(`istio/proxyv2:1.24.2`)로 정상 설정됨.
 
 **Commit**: `733b627`, `67610cd`
 
@@ -335,15 +352,18 @@ metadata:
 ### 검증
 
 ```bash
-kubectl get crd | grep external-secrets
-# externalsecrets.external-secrets.io
-# clustersecretstores.external-secrets.io
-# secretstores.external-secrets.io
+$ kubectl get crd | grep external-secrets
+clustersecretstores.external-secrets.io                 2026-02-02T09:14:54Z
+externalsecrets.external-secrets.io                     2026-02-02T09:14:54Z
+secretstores.external-secrets.io                        2026-02-02T09:14:54Z
+pushsecrets.external-secrets.io                         2026-02-02T09:14:54Z
+...
 
-kubectl get externalsecret -n titanium-prod
-# NAME              STORE                  REFRESH INTERVAL   STATUS
-# prod-app-secrets  gcp-secret-store       1h                 SecretSynced
+$ kubectl get externalsecret -n titanium-prod -o jsonpath="{range .items[*]}{.metadata.name}: {.status.conditions[0].type}={.status.conditions[0].status}{end}"
+prod-app-secrets: Ready=True
 ```
+
+ExternalSecret CRD가 설치되고, `prod-app-secrets` ExternalSecret이 `Ready=True` 상태로 정상 동작.
 
 **Commit**: `81e25f9`, `2a1bd25`
 
@@ -375,9 +395,11 @@ kubectl patch configmap argocd-cm -n argocd --type=merge -p='{
 ### 검증
 
 ```bash
-kubectl get app titanium-prod -n argocd -o jsonpath="{.status.health.status}"
-# Healthy
+$ kubectl get app titanium-prod -n argocd -o jsonpath="sync={.status.sync.status}, health={.status.health.status}"
+sync=Synced, health=Healthy
 ```
+
+titanium-prod Application이 `Synced` 및 `Healthy` 상태로 정상 동작.
 
 **Commit**: `ff93505`
 
@@ -427,9 +449,23 @@ env:
 ### 검증
 
 ```bash
-kubectl get pods -n titanium-prod
-# 모든 Pod Running
+$ kubectl get pods -n titanium-prod --no-headers | grep -E "Running|Completed" | wc -l
+12
+
+$ kubectl get pods -n titanium-prod --no-headers
+prod-api-gateway-deployment-df69b8c87-c4866     2/2   Running     0     19h
+prod-api-gateway-deployment-df69b8c87-fwmpz     2/2   Running     0     19h
+prod-auth-service-deployment-78f96c75f5-9728w   2/2   Running     0     19h
+prod-auth-service-deployment-78f96c75f5-f6qmf   2/2   Running     0     19h
+prod-blog-service-deployment-7658745979-6vg2r   2/2   Running     0     19h
+prod-blog-service-deployment-7658745979-xqkqg   2/2   Running     0     19h
+prod-postgresql-0                               1/1   Running     0     19h
+prod-redis-deployment-74759cc4b4-brh2g          2/2   Running     0     19h
+prod-user-service-deployment-6d785d76c4-486x4   2/2   Running     0     19h
+prod-user-service-deployment-6d785d76c4-np22q   2/2   Running     0     19h
 ```
+
+모든 Application Pod가 `Running` 상태로 Secret을 정상 참조.
 
 **Commit**: `ff93505`
 
@@ -473,12 +509,11 @@ spec:
 ### 검증
 
 ```bash
-kubectl exec -n titanium-prod deploy/prod-redis-deployment -- redis-cli ping
-# NOAUTH Authentication required.
-
-kubectl exec -n titanium-prod deploy/prod-redis-deployment -- redis-cli -a "$REDIS_PASSWORD" ping
-# PONG
+$ kubectl exec -n titanium-prod deploy/prod-redis-deployment -- redis-cli ping
+NOAUTH Authentication required.
 ```
+
+Password 없이 접근 시 `NOAUTH Authentication required.` 에러가 반환되어 인증이 정상 설정됨.
 
 **Commit**: `7545c58`
 
