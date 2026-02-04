@@ -182,6 +182,31 @@ Kiali Overview 페이지. Cluster 내 모든 Namespace 표시.
 - monitoring
 - titanium-prod (Istio injection enabled)
 
+#### Namespace별 Istio Sidecar Injection 상태
+
+| Namespace | istio-injection | Istio Config | Traffic | 설명 |
+|-----------|-----------------|--------------|---------|------|
+| titanium-prod | `enabled` | mTLS 활성화 | 표시됨 | 비즈니스 애플리케이션 |
+| istio-system | `enabled` | Control Plane | N/A | Istio 자체 컴포넌트 |
+| argocd | 미설정 | N/A | No inbound | GitOps 도구, Mesh 불필요 |
+| monitoring | 미설정 | N/A | No inbound | Prometheus/Grafana 스택 |
+| external-secrets | 미설정 | N/A | No inbound | 인프라 컴포넌트 |
+| default | 미설정 | N/A | No inbound | 기본 namespace, 미사용 |
+
+**N/A 및 No inbound traffic 표시 원인**:
+- `istio-injection: enabled` label이 없는 namespace에는 Istio sidecar가 주입되지 않음
+- Sidecar가 없으면 Kiali에서 트래픽 모니터링 및 Istio 설정 표시 불가
+- 이는 의도된 설계로, 인프라 컴포넌트는 Service Mesh 오버헤드 없이 운영
+
+**실제 Pod 상태 비교**:
+```bash
+# titanium-prod: 2/2 (app + istio-proxy sidecar)
+prod-api-gateway-deployment-xxx    2/2     Running
+
+# argocd: 1/1 (app only, no sidecar)
+argocd-server-xxx                  1/1     Running
+```
+
 ### 4.2 Mesh Topology
 
 Service Mesh 구성 요소 토폴로지.
