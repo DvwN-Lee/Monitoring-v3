@@ -3,6 +3,8 @@
 GCP 기반 K3s Kubernetes Cluster에서 운영되는 Microservice Monitoring Platform.
 Terraform(IaC), ArgoCD(GitOps), Istio(Service Mesh)를 통해 End-to-End 자동화를 구현한다.
 
+![ArgoCD Dashboard](docs/demo/15-argocd-dashboard.png)
+
 ## 주요 특징
 
 | 영역 | 구현 |
