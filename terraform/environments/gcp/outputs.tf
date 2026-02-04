@@ -1,14 +1,9 @@
 # Outputs for GCP Environment - Complete GitOps Automation
 
-# Admin Access
-output "detected_admin_ip" {
-  description = "Auto-detected current public IP for admin access"
-  value       = local.current_ip_cidr
-}
-
+# Admin Access (Hybrid Approach)
 output "admin_cidrs" {
-  description = "All admin CIDRs (auto-detected + additional)"
-  value       = local.admin_cidrs
+  description = "Admin CIDRs for direct access (SSH always has IAP fallback)"
+  value       = var.admin_cidrs
 }
 
 # Network Outputs
@@ -127,6 +122,18 @@ output "deployment_status" {
     5. Monitor bootstrap progress:
        gcloud compute ssh ubuntu@${google_compute_instance.k3s_master.name} --zone=${var.zone}
        tail -f /var/log/k3s-bootstrap.log
+
+    6. Fallback Access (if IP changes):
+       # SSH via IAP tunnel (always works)
+       gcloud compute ssh ubuntu@${google_compute_instance.k3s_master.name} --zone=${var.zone} --tunnel-through-iap
+
+       # K8s API via SSH tunnel
+       ssh -L 6443:localhost:6443 ubuntu@${google_compute_address.master_external_ip.address}
+       kubectl --server=https://localhost:6443 get nodes
+
+       # Dashboard via SSH port-forward
+       ssh -L 31300:localhost:31300 ubuntu@${google_compute_address.master_external_ip.address}
+       # Then access http://localhost:31300
 
     Deployed Applications (via ArgoCD GitOps):
     - titanium-prod: Main application stack

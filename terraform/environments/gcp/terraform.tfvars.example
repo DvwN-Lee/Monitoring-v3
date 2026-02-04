@@ -22,6 +22,21 @@ os_image            = "ubuntu-os-cloud/ubuntu-2204-lts"
 # SSH Configuration
 ssh_public_key_path = "~/.ssh/id_rsa.pub"
 
+# Admin Access Configuration (optional but recommended)
+# List IPs that need direct access to K8s API and Dashboards
+# Must be in CIDR notation (e.g., "1.2.3.4/32" for single IP)
+#
+# Hybrid Approach:
+# - SSH: Always accessible via IAP tunnel (gcloud compute ssh --tunnel-through-iap)
+#        admin_cidrs provide additional direct SSH access for convenience
+# - K8s API / Dashboards: Only accessible from admin_cidrs
+#        If IP changes, use SSH tunnel + port-forward as fallback
+#
+# If omitted or empty, SSH still works via IAP tunnel
+admin_cidrs = [
+  "YOUR_IP_ADDRESS/32",  # Replace with your actual IP (or leave empty)
+]
+
 # PostgreSQL Configuration (sensitive)
 # Set via environment variable: export TF_VAR_postgres_password="your-password"
 # postgres_password = "your-secure-password"

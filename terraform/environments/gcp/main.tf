@@ -14,10 +14,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.5"
     }
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.4"
-    }
   }
 }
 
@@ -28,17 +24,19 @@ provider "google" {
   zone    = var.zone
 }
 
-# Auto-detect current public IP for admin access
-data "http" "my_public_ip" {
-  url = "https://api.ipify.org"
-}
-
 locals {
-  # Current IP in CIDR notation
-  current_ip_cidr = "${chomp(data.http.my_public_ip.response_body)}/32"
-
-  # Combine auto-detected IP with any additional admin CIDRs
-  admin_cidrs = distinct(concat([local.current_ip_cidr], var.additional_admin_cidrs))
+  # =============================================================================
+  # Admin Access Configuration (Hybrid Approach)
+  # =============================================================================
+  # - SSH: IAP(Identity-Aware Proxy) always allowed as fallback + admin_cidrs
+  # - K8s API / Dashboards: admin_cidrs only (direct access for convenience)
+  #
+  # Benefits:
+  # - IAP fallback ensures access even when IP changes
+  # - Direct access via admin_cidrs for convenience (no tunnel required)
+  # - IaC compliant: all IPs explicitly defined in tfvars
+  # =============================================================================
+  admin_cidrs = var.admin_cidrs
 
   # Common labels for all resources
   common_labels = {
@@ -123,7 +121,13 @@ resource "google_secret_manager_secret" "app_secrets" {
   labels = local.common_labels
 }
 
-# Firewall Rules - Allow SSH, k8s API, HTTP, Dashboards
+# =============================================================================
+# Firewall Rules
+# =============================================================================
+
+# SSH Access: IAP (fallback) + Admin CIDRs (convenience)
+# - IAP (35.235.240.0/20): Always allowed, works even when IP changes
+# - Admin CIDRs: Direct SSH access without tunnel
 resource "google_compute_firewall" "allow_ssh" {
   name    = "${var.cluster_name}-allow-ssh"
   network = google_compute_network.vpc.name
@@ -133,11 +137,13 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # IAP (Identity-Aware Proxy) range + auto-detected current IP + additional CIDRs
   source_ranges = distinct(concat([local.gcp_iap_cidr], local.admin_cidrs, var.ssh_allowed_cidrs))
   target_tags   = ["k3s-node"]
 }
 
+# Kubernetes API Access: Admin CIDRs only
+# - No IAP fallback (use SSH tunnel + kubectl if IP changes)
+# - Direct kubectl access from allowed IPs
 resource "google_compute_firewall" "allow_k8s_api" {
   name    = "${var.cluster_name}-allow-k8s-api"
   network = google_compute_network.vpc.name
@@ -147,11 +153,14 @@ resource "google_compute_firewall" "allow_k8s_api" {
     ports    = ["6443"]
   }
 
-  # Auto-detected current IP + additional admin CIDRs
   source_ranges = local.admin_cidrs
   target_tags   = ["k3s-master"]
 }
 
+# Dashboard Access: Admin CIDRs only
+# - ArgoCD (30080), Grafana (31300), Prometheus (31090), Kiali (31200)
+# - Istio Gateway (31080/HTTP, 31443/HTTPS)
+# - No IAP fallback (use SSH tunnel + port-forward if IP changes)
 resource "google_compute_firewall" "allow_dashboards" {
   name    = "${var.cluster_name}-allow-dashboards"
   network = google_compute_network.vpc.name
@@ -161,7 +170,6 @@ resource "google_compute_firewall" "allow_dashboards" {
     ports    = ["80", "443", "30080", "31080", "31090", "31200", "31300", "31443"]
   }
 
-  # Auto-detected current IP + additional admin CIDRs
   source_ranges = local.admin_cidrs
   target_tags   = ["k3s-master", "k3s-worker"]
 }

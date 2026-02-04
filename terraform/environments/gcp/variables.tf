@@ -95,8 +95,19 @@ variable "ssh_allowed_cidrs" {
   default     = []
 }
 
-variable "additional_admin_cidrs" {
-  description = "Additional CIDR blocks for Kubernetes API and Dashboard access (current IP is auto-detected)"
+variable "admin_cidrs" {
+  description = <<-EOT
+    CIDR blocks for direct access to K8s API, SSH, and Dashboards.
+
+    Hybrid Approach:
+    - SSH: IAP always allowed as fallback, admin_cidrs for convenience
+    - K8s API / Dashboards: admin_cidrs only (use SSH tunnel if IP changes)
+
+    Example: ["203.0.113.50/32", "198.51.100.0/24"]
+
+    Note: Even if empty, SSH access via IAP tunnel remains available:
+      gcloud compute ssh --tunnel-through-iap
+  EOT
   type        = list(string)
   default     = []
 }
