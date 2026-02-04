@@ -32,13 +32,13 @@ Blog Application의 Main Page. 로그인 전 상태에서 "로그인" 버튼이 
 
 ![Signup Filled](03-signup-filled.png)
 
-회원가입 완료 후 자동 로그인.
+회원가입 완료 후 로그인 Modal로 전환.
 
 ![Signup Success](04-signup-success.png)
 
-### 1.3 로그인 확인
+### 1.3 로그인
 
-로그인 완료 상태. Header에 "글쓰기", "로그아웃" 버튼 표시.
+생성한 계정 정보로 로그인 진행. 로그인 완료 시 Header에 "글쓰기", "로그아웃" 버튼 표시.
 
 ![Login Success](05-login-success.png)
 
