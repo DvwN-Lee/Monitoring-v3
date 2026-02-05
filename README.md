@@ -101,10 +101,11 @@ Monitoring-v3/
 ├── auth-service/                 # Python (FastAPI) - JWT 인증
 ├── user-service/                 # Python (FastAPI) - 사용자 관리
 ├── blog-service/                 # Python (FastAPI) - 블로그 + Frontend
+├── scripts/                      # 유틸리티 스크립트
 ├── docs/                         # 문서
 │   ├── architecture/             # 아키텍처 문서
 │   └── demo/                     # 데모 스크린샷
-└── tests/                        # 테스트
+└── tests/                        # Terratest 테스트
 ```
 
 ## 빠른 시작
@@ -114,20 +115,37 @@ Monitoring-v3/
 - Terraform >= 1.5
 - Google Cloud SDK (gcloud)
 - kubectl
+- SSH Key Pair
 
 ### 인프라 배포
 
 ```bash
 cd terraform/environments/gcp
 
-# 변수 설정
-export TF_VAR_project_id="your-gcp-project-id"
+# 1. SSH 키 생성 (없는 경우)
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/titanium-key -N ""
+
+# 2. terraform.tfvars 설정
+cat > terraform.tfvars << 'EOF'
+project_id = "your-gcp-project-id"
+ssh_public_key_path = "~/.ssh/titanium-key.pub"
+
+# 현재 IP에서 Dashboard 접근 허용 (선택)
+admin_cidrs = ["YOUR_IP/32"]
+EOF
+
+# 3. 민감한 변수는 환경변수로 설정
 export TF_VAR_postgres_password="your-secure-password"
 export TF_VAR_grafana_admin_password="your-grafana-password"
 
-# 배포
+# 4. 배포
 terraform init
 terraform apply
+```
+
+**admin_cidrs 미설정 시**: SSH 터널을 통해 Dashboard에 접근 가능.
+```bash
+gcloud compute ssh titanium-k3s-master --tunnel-through-iap -- -L 30080:localhost:30080
 ```
 
 배포 완료 후 약 10분 내에 전체 스택이 자동 구성된다:
@@ -179,6 +197,8 @@ terraform destroy
 | [Architecture](docs/architecture/README.md) | 상세 아키텍처 문서 |
 | [ADR](docs/architecture/adr/) | Architecture Decision Records |
 | [Demo](docs/demo/README.md) | GCP Production 환경 데모 |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | IaC 배포 및 테스트 문제 해결 |
+| [Secret Management](docs/secret-management.md) | Secret 관리 가이드 |
 
 ## License
 
