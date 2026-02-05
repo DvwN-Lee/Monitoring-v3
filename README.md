@@ -3,7 +3,9 @@
 GCP 기반 K3s Kubernetes Cluster에서 운영되는 Microservice Monitoring Platform.
 Terraform(IaC), ArgoCD(GitOps), Istio(Service Mesh)를 통해 End-to-End 자동화를 구현한다.
 
-![ArgoCD Dashboard](docs/demo/15-argocd-dashboard.png)
+| Grafana - Cluster Metrics | Kiali - Service Mesh |
+|:-------------------------:|:--------------------:|
+| ![Grafana](docs/demo/19-grafana-k8s-cluster.png) | ![Kiali](docs/demo/22-kiali-traffic-graph.png) |
 
 ## 주요 특징
 
