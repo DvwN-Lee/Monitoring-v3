@@ -480,6 +480,5 @@ flowchart LR
 ## 관련 문서
 
 - [ADR 목록](adr/README.md): Architecture Decision Records
-- [IaC 트러블슈팅](../IaC-TROUBLESHOOTING.md): Infrastructure 문제 해결
-- [트러블슈팅](../TROUBLESHOOTING.md): 일반 문제 해결
+- [Troubleshooting](../TROUBLESHOOTING.md): IaC 배포 및 테스트 문제 해결
 - [Secret 관리](../secret-management.md): Secret 관리 가이드

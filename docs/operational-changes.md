@@ -134,41 +134,13 @@ kubectl exec -n titanium-prod <pod> -c blog-service-container -- \
 - 각 Deployment는 2개 replica로 동작하여 1개씩 순차 재시작
 - 서비스 중단 없음 (최소 1개 Pod는 항상 Running 상태 유지)
 
+### 후속 조치 (완료)
+
+본 이슈 이후 External Secrets Operator + GCP Secret Manager 기반 Secret 관리 체계가 구축되었다. 상세 내용은 [Secret Management](secret-management.md) 문서 참조.
+
 ### 향후 권장사항
 
-#### 1. Secret 관리 도구 도입
-
-**External Secrets Operator 도입 권장**:
-- Google Secret Manager와 연동
-- Secret 값을 GitOps 저장소 외부에서 관리
-- Secret rotation 자동화
-
-**도입 예시**:
-```yaml
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: prod-app-secrets
-  namespace: titanium-prod
-spec:
-  secretStoreRef:
-    name: gcpsm-secret-store
-    kind: SecretStore
-  target:
-    name: prod-app-secrets
-  data:
-  - secretKey: JWT_PRIVATE_KEY
-    remoteRef:
-      key: titanium-jwt-private-key
-  - secretKey: JWT_PUBLIC_KEY
-    remoteRef:
-      key: titanium-jwt-public-key
-  - secretKey: POSTGRES_PASSWORD
-    remoteRef:
-      key: titanium-postgres-password
-```
-
-#### 2. Secret 값 검증 자동화
+#### 1. Secret 값 검증 자동화
 
 **Pre-deployment 검증**:
 - Secret 값이 placeholder인지 자동 검증
@@ -200,7 +172,7 @@ fi
 echo "Secret validation passed"
 ```
 
-#### 3. 문서화
+#### 2. 문서화
 
 **Secret 관리 절차 문서화**:
 - Secret 생성 절차
