@@ -24,6 +24,16 @@ Titanium은 GCP 기반 Kubernetes(K3s) 환경에서 운영되는 Microservice �
 
 ```mermaid
 flowchart TB
+    subgraph Dev["Development"]
+        Developer[Developer]
+    end
+
+    subgraph GitHub["GitHub"]
+        Repo[Repository]
+        Actions[GitHub Actions<br/>CI Pipeline]
+        GHCR[GHCR<br/>Container Registry]
+    end
+
     subgraph Internet
         Client[Client]
     end
@@ -54,6 +64,16 @@ flowchart TB
         SM[GCP Secret Manager]
     end
 
+    %% CI Flow
+    Developer -->|git push| Repo
+    Repo -->|trigger| Actions
+    Actions -->|push image| GHCR
+
+    %% CD Flow
+    Repo -->|webhook| ArgoCD
+    GHCR -.->|pull image| Services
+
+    %% Request Flow
     Client -->|HTTPS/443| LB
     LB -->|NodePort| IGW
     IGW --> Services
@@ -263,30 +283,19 @@ Monitoring-v3/
 
 ### CI/CD 파이프라인
 
-```mermaid
-flowchart LR
-    subgraph Dev["Development"]
-        Developer[Developer]
-    end
+CI/CD 흐름은 상단 시스템 아키텍처 다이어그램에 통합되어 있다. 각 단계는 다음과 같다.
 
-    subgraph GitHub
-        Repo[Repository]
-        Actions[GitHub Actions<br/>CI Pipeline]
-        GHCR[GHCR<br/>Container Registry]
-    end
+**CI (Continuous Integration)**
 
-    subgraph K3s["K3s Cluster"]
-        ArgoCD[ArgoCD<br/>GitOps]
-        Pods[Application Pods]
-    end
+1. Developer가 코드를 변경하여 `git push`
+2. GitHub Actions CI Pipeline이 자동 Trigger (Lint, Test, Build)
+3. Container Image를 GHCR(GitHub Container Registry)에 Push
 
-    Developer -->|git push| Repo
-    Repo -->|trigger| Actions
-    Actions -->|push image| GHCR
-    Repo -->|webhook| ArgoCD
-    GHCR -->|pull image| Pods
-    ArgoCD -->|sync| Pods
-```
+**CD (Continuous Deployment)**
+
+1. Repository 변경 시 Webhook을 통해 ArgoCD에 알림
+2. ArgoCD가 Git Repository의 Manifest와 Cluster 상태를 비교하여 자동 Sync
+3. K3s Cluster 내 Pod가 GHCR에서 새 Image를 Pull하여 배포 완료
 
 ---
 
