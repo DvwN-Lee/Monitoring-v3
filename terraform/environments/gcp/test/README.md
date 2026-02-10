@@ -279,7 +279,7 @@ and found no differences, so no changes are needed.
     30_compute_k3s_test.go:151: 멱등성 테스트 통과: 재적용 시 변경 사항 없음
 --- PASS: TestComputeIdempotency (276.67s)
 PASS
-ok      github.com/DvwN-Lee/Monitoring-v2/terraform/environments/gcp/test      321.946s
+ok      github.com/DvwN-Lee/Monitoring-v3/terraform/environments/gcp/test      321.946s
 ```
 
 ### 실패 케이스 예시

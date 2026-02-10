@@ -1,13 +1,13 @@
 # Blog Service (blog-service)
 
-![Blog Service](https://raw.githubusercontent.com/DvwN-Lee/Monitoring-v2/main/docs/04-operations/screenshots/blog-service.png)
+![Blog Service](../../docs/demo/01-blog-main.png)
 
 ## 1. 개요
 - **블로그 기능 제공 서비스**: `blog-service`는 블로그 게시물(Post)의 CRUD(생성, 조회, 수정, 삭제) 기능을 담당하는 Microservice로, Python의 **FastAPI**를 사용하여 개발됨
 
 - **SPA 프론트엔드 내장**: 이 Service는 게시물 관리를 위한 API뿐만 아니라, 사용자가 직접 상호작용할 수 있는 SPA(Single Page Application) 형태의 웹 UI를 함께 제공함. UI는 `templates`와 `static` 폴더에 저장된 HTML, CSS, JavaScript 파일로 구성됨
 
-- **독립적인 데이터 관리**: 게시물 데이터는 서비스 내부에 있는 **SQLite** 데이터베이스 파일(`blog.db`)에 영속적으로 저장 및 관리됨
+- **유연한 데이터 관리**: 게시물 데이터는 `USE_POSTGRES` 환경변수에 따라 **PostgreSQL** 또는 **SQLite** 중 선택하여 저장됨. Production 환경에서는 PostgreSQL, 로컬 개발 환경에서는 SQLite(`blog.db`)를 사용
 
 ## 2. 핵심 기능 및 책임
 - **게시물 관리 (Post Management)**: 게시물의 생성, 목록 조회, 상세 조회, 수정, 삭제 기능을 위한 API 엔드포인트를 제공
@@ -16,10 +16,10 @@
 
 - **웹 UI 제공**: `Jinja2` 템플릿 엔진을 사용하여 `index.html`을 렌더링하고, 정적 파일(JS, CSS)을 직접 서빙하여 사용자에게 완전한 블로그 웹 애플리케이션을 제공
 
-- **모니터링 지원**: `load-balancer`의 상태 수집을 위한 헬스 체크(`- /health`) 및 통계(`- /stats`) 엔드포인트를 지원
+- **모니터링 지원**: `api-gateway`의 상태 수집을 위한 헬스 체크(`- /health`) 및 통계(`- /stats`) 엔드포인트를 지원
 
 ## 3. 기술적 구현 (`blog_service.py`, `static/js/app.js`)
-- 백엔드는 **FastAPI**로, 데이터베이스는 **SQLite**로 구현되어 있으며, 인증을 위해 `auth-service`와 비동기 HTTP 통신(`aiohttp`)을 수행
+- 백엔드는 **FastAPI**로, 데이터베이스는 **PostgreSQL** 또는 **SQLite**를 환경에 따라 선택하여 사용하며, 인증을 위해 `auth-service`와 비동기 HTTP 통신(`aiohttp`)을 수행
 
 ### 3.1. 인증 및 인가 처리 (`require_user` 함수)
 - `blog-service`의 핵심 보안 기능은 FastAPI의 의존성 주입(Dependency Injection)을 통해 구현된 `require_user` 함수에 의해 처리됨
@@ -36,11 +36,11 @@
 ## 4. 제공 API 엔드포인트
 |경로|메서드|인증|설명|
 |:---|:---|:--:|:---|
-|`/api/posts`|`GET`|X|전체 게시물 목록을 페이지네이션과 함께 조회|
-|`/api/posts`|`POST`|O|새로운 게시물을 생성. 작성자는 인증된 사용자로 자동 설정|
-|`/api/posts/{id}`|`GET`|X|특정 ID를 가진 게시물의 상세 정보를 조회|
-|`/api/posts/{id}`|`PATCH`|O|게시물 정보를 수정. 작성자 본인만 가능|
-|`/api/posts/{id}`|`DELETE`|O|게시물을 삭제. 작성자 본인만 가능|
+|`/blog/api/posts`|`GET`|X|전체 게시물 목록을 페이지네이션과 함께 조회|
+|`/blog/api/posts`|`POST`|O|새로운 게시물을 생성. 작성자는 인증된 사용자로 자동 설정|
+|`/blog/api/posts/{id}`|`GET`|X|특정 ID를 가진 게시물의 상세 정보를 조회|
+|`/blog/api/posts/{id}`|`PATCH`|O|게시물 정보를 수정. 작성자 본인만 가능|
+|`/blog/api/posts/{id}`|`DELETE`|O|게시물을 삭제. 작성자 본인만 가능|
 
 ## 5. 웹 인터페이스 엔드포인트
 |경로|메서드|설명|
@@ -55,4 +55,13 @@
 
 ## 7. 설정
 - `AUTH_SERVICE_URL`: JWT 토큰 검증을 위해 호출할 Auth Service의 주소
-- `BLOG_DATABASE_PATH`: SQLite 데이터베이스 파일이 저장될 경로 (기본값: `/app/blog.db`)
+- `REDIS_HOST`: Redis 서버의 호스트 이름 (기본값: `redis-service`)
+- `REDIS_PORT`: Redis 서버의 포트 (기본값: `6379`)
+- `USE_POSTGRES`: PostgreSQL 사용 여부 (`true`/`false`, 기본값: `false`)
+- `POSTGRES_HOST`: PostgreSQL 서버 호스트 (기본값: `postgresql-service`)
+- `POSTGRES_PORT`: PostgreSQL 서버 포트 (기본값: `5432`)
+- `POSTGRES_DB`: PostgreSQL 데이터베이스 이름 (기본값: `titanium`)
+- `POSTGRES_USER`: PostgreSQL 사용자 (기본값: `postgres`)
+- `POSTGRES_PASSWORD`: PostgreSQL 비밀번호
+- `POSTGRES_SSLMODE`: PostgreSQL SSL 모드 (기본값: `disable`)
+- `BLOG_DATABASE_PATH`: SQLite 사용 시 데이터베이스 파일 경로 (기본값: `/app/blog.db`)

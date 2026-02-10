@@ -51,8 +51,7 @@ graph LR
 - **`*-deployment.yaml`**: 각 Service의 Pod를 어떻게 실행할지 정의 (사용할 Container 이미지, 기본 복제본 수, 리소스 요구량/한도, Liveness/Readiness Probe 등)
 - **`*-service.yaml`**: Deployment에 의해 실행된 Pod들에 안정적인 네트워크 주소(`ClusterIP`)를 부여하여 Service 간 통신을 가능하게 함
 - **`configmap.yaml` & `secret.yaml`**: 애플리케이션의 설정과 비밀 정보를 관리
-- **`user-service-pvc.yaml`**: `user-service`가 사용할 영구 저장 공간을 요청
-- **`user-service-backup-cronjob.yaml`**: 매일 자정(UTC)에 `user-service`의 DB를 백업하는 `CronJob`을 정의
+- **`rbac.yaml`**: Service Account 및 RBAC 권한을 정의
 
 ### 3.2. `overlays/local` 디렉터리 (로컬 환경 맞춤 설정)
 `overlays/local/kustomization.yaml` 파일은 `base`의 설정을 상속받아 로컬 개발 환경에 맞게 **변경(Patch)**함.
@@ -62,10 +61,31 @@ graph LR
 - **`replicas`**: 모든 `Deployment`의 복제본(Pod) 수를 `1`로 재정의하여 로컬 환경의 리소스 사용량을 최소화함
 - **`configMapGenerator`**: `base`의 `ConfigMap`에 로컬 환경용 변수(`ENVIRONMENT=local`, `DEBUG_MODE=true` 등)를 추가(merge)함
 - **`patches`**:
-    - `load-balancer-service`의 타입을 `ClusterIP`에서 **`NodePort`**로 변경하여, 로컬 머신의 특정 포트(30700)를 통해 외부에서 직접 접근할 수 있도록 함
     - 모든 `Deployment`의 `imagePullPolicy`를 **`IfNotPresent`**로 변경하여, 이미지가 로컬에 있을 경우 다시 내려받지 않도록 해 개발 속도를 향상시킴
+    - `PersistentVolumeClaim`의 Storage 요청을 `100Mi`로 축소하여 로컬 환경의 디스크 사용량을 최소화함
 
-### 3.3. Kustomize 빌드 결과 비교
+### 3.3. `overlays/gcp` 디렉터리 (GCP Production 환경)
+`overlays/gcp/`는 GCP K3s Cluster에 배포되는 Production 환경 설정을 정의함. ArgoCD가 이 경로를 참조하여 자동 동기화를 수행한다.
+
+- **Istio 라우팅**: `istio/` 하위에 Gateway, VirtualService 정의
+- **NetworkPolicy**: Zero Trust 기반 Pod 간 통신 정책 (`network-policies.yaml`)
+- **ExternalSecret**: GCP Secret Manager 연동 (`external-secrets/`)
+- **HPA**: Horizontal Pod Autoscaler 설정 (`hpa.yaml`)
+- **PostgreSQL**: Production 데이터베이스 (`postgres/`)
+- **Monitoring**: ServiceMonitor, Prometheus Rule 등 (`monitoring/`)
+
+### 3.4. `overlays/staging` 디렉터리 (Staging 환경)
+`overlays/staging/`은 Production 배포 전 검증을 위한 Staging 환경 설정을 정의함.
+
+### 3.5. `monitoring/` 디렉터리 (Monitoring Stack 설정)
+`monitoring/`은 Prometheus, Grafana, Loki로 구성된 관측성(Observability) Stack의 Helm Values 및 설정 파일을 포함한다.
+
+- **Prometheus**: `prometheus-values.yaml`, `prometheus-rules.yaml`
+- **Grafana**: `dashboard-configmap.yaml`, 커스텀 대시보드 JSON
+- **Loki**: `loki-stack-values.yaml`, `promtail-values.yaml`
+- **ServiceMonitor**: 각 Microservice의 메트릭 수집 대상 정의
+
+### 3.6. Kustomize 빌드 결과 비교
 
 `base`와 `overlays/local`을 빌드했을 때, 설정이 어떻게 변경되는지 비교합니다:
 
@@ -102,37 +122,12 @@ spec:
         imagePullPolicy: IfNotPresent  # 로컬 캐시 사용
 ```
 
-#### load-balancer Service 타입 변경
-```yaml
-# base/load-balancer-service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: load-balancer-service
-spec:
-  type: ClusterIP  # Cluster 내부에서만 접근 가능
-```
-
-```yaml
-# kustomize build overlays/local (결과)
-apiVersion: v1
-kind: Service
-metadata:
-  name: local-load-balancer-service
-  namespace: titanium-local
-spec:
-  type: NodePort  # 외부에서 접근 가능
-  ports:
-  - port: 80
-    nodePort: 30700  # 고정 포트
-```
-
 **주요 변경 사항:**
 - **replicas**: 3 → 1 (로컬 리소스 절약)
 - **namePrefix**: api-gateway → local-api-gateway (환경 구분)
 - **namespace**: default → titanium-local (격리)
-- **service type**: ClusterIP → NodePort (외부 접근)
-- **imagePullPolicy**: Always → IfNotPresent (빠른 개발)
+- **imagePullPolicy**: Always → IfNotPresent (로컬 캐시 사용)
+- **PVC storage**: 기본값 → 100Mi (로컬 환경 축소)
 
 ## 4. 배포 방법
 - 이 프로젝트의 Kubernetes 배포는 **Skaffold**를 통해 자동화됨

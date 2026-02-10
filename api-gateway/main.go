@@ -1,4 +1,4 @@
-// TItanium-v2/api-gateway/main.go
+// Monitoring-v3/api-gateway/main.go
 // Version: 1.1.0 - Security Enhancement (CORS, Security Headers, Rate Limiting, Request Size Limit)
 
 package main

@@ -173,7 +173,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 ArgoCD를 통해 자동으로 배포되는 applications:
 
 1. **titanium-prod**: Main application stack
-   - Source: https://github.com/DvwN-Lee/Monitoring-v2.git
+   - Source: https://github.com/DvwN-Lee/Monitoring-v3.git
    - Path: k8s-manifests/overlays/gcp
    - Auto-sync: enabled
 

@@ -1,4 +1,4 @@
-# TItanium-v2/user-service/user_service.py
+# Monitoring-v3/user-service/user_service.py
 # Version: 1.3.0 - Security Enhancement (CORS, Rate Limiting, Security Headers)
 
 import os

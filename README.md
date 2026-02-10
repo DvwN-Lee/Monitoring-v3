@@ -32,7 +32,7 @@ Terraform(IaC), ArgoCD(GitOps), Istio(Service Mesh)를 통해 End-to-End 자동�
 | Kubernetes | K3s v1.31 |
 | IaC | Terraform |
 | GitOps | ArgoCD |
-| Service Mesh | Istio v1.24 |
+| Service Mesh | Istio v1.24.2 |
 | Monitoring | Prometheus, Loki, Grafana |
 | Secret Management | External Secrets Operator |
 | Container Registry | GitHub Container Registry (ghcr.io) |
@@ -106,15 +106,18 @@ Monitoring-v3/
 │       ├── gcp/                  # GCP Production
 │       ├── staging/              # Staging
 │       └── local/                # Local Development
-├── api-gateway/                  # Go (Gin) - API 라우팅
+├── api-gateway/                  # Go (net/http) - API 라우팅
 ├── auth-service/                 # Python (FastAPI) - JWT 인증
 ├── user-service/                 # Python (FastAPI) - 사용자 관리
 ├── blog-service/                 # Python (FastAPI) - 블로그 + Frontend
 ├── scripts/                      # 유틸리티 스크립트
 ├── docs/                         # 문서
 │   ├── architecture/             # 아키텍처 문서
-│   └── demo/                     # 데모 스크린샷
-└── tests/                        # Terratest 테스트
+│   ├── demo/                     # 데모 스크린샷
+│   ├── TROUBLESHOOTING.md        # IaC 배포 및 테스트 문제 해결
+│   ├── secret-management.md      # Secret 관리 가이드
+│   └── operational-changes.md    # 운영 변경 이력
+└── tests/                        # 종합 테스트 (Smoke, Integration, E2E)
 ```
 
 ## 빠른 시작
@@ -182,7 +185,7 @@ terraform destroy
 
 | Service | 기술 | 포트 | 역할 |
 |---------|------|------|------|
-| api-gateway | Go (Gin) | 8000 | API 라우팅, Rate Limiting |
+| api-gateway | Go (net/http) | 8000 | API 라우팅, Rate Limiting |
 | auth-service | Python (FastAPI) | 8002 | JWT 인증, 로그인 |
 | user-service | Python (FastAPI) | 8001 | 사용자 CRUD |
 | blog-service | Python (FastAPI) | 8005 | 블로그 CRUD, Frontend |

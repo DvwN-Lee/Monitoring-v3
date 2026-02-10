@@ -1,4 +1,4 @@
-module github.com/DvwN-Lee/Monitoring-v2/terraform/environments/gcp/test
+module github.com/DvwN-Lee/Monitoring-v3/terraform/environments/gcp/test
 
 go 1.21
 

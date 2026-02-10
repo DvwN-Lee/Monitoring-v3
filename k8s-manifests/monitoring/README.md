@@ -10,8 +10,6 @@
 
 ### 1. Prometheus (메트릭 수집)
 
-![Prometheus](https://raw.githubusercontent.com/DvwN-Lee/Monitoring-v2/main/docs/04-operations/screenshots/prometheus.png)
-
 **역할**: 애플리케이션 및 인프라 메트릭을 수집하고 저장하는 시계열 데이터베이스
 
 **설정 파일**:
@@ -40,8 +38,6 @@ prometheus:
 
 ### 2. Grafana (시각화 대시보드)
 
-![Grafana Golden Signals](https://raw.githubusercontent.com/DvwN-Lee/Monitoring-v2/main/docs/04-operations/screenshots/grafana-golden-signals-full.png)
-
 **역할**: Prometheus와 Loki에서 수집한 데이터를 시각화하는 대시보드 플랫폼
 
 **설정 파일**:
@@ -56,12 +52,10 @@ prometheus:
   - Saturation (포화도): CPU, 메모리 사용률
 
 **접속 정보**:
-- URL: `http://10.0.11.168:30300`
-- 기본 계정: `admin` / `prom-operator`
+- URL: `http://<MASTER_IP>:31300/grafana/`
+- 기본 계정: `admin` / Terraform 변수 `TF_VAR_grafana_admin_password`로 설정된 값
 
 ### 3. Loki (중앙 로깅)
-
-![Loki Logs](https://raw.githubusercontent.com/DvwN-Lee/Monitoring-v2/main/docs/04-operations/screenshots/loki-logs.png)
 
 **역할**: Container 로그를 수집하고 저장하는 로그 집계 시스템
 
@@ -230,10 +224,6 @@ sum(count_over_time({namespace="titanium-prod"}[5m]))
 - [Prometheus Operator Documentation](https://prometheus-operator.dev/)
 - [Grafana Documentation](https://grafana.com/docs/)
 - [Loki Documentation](https://grafana.com/docs/loki/latest/)
-- [프로젝트 아키텍처 문서](../../docs/02-architecture/architecture.md)
-- [트러블슈팅 가이드](../../docs/04-troubleshooting/monitoring/)
+- [프로젝트 아키텍처 문서](../../docs/architecture/README.md)
+- [트러블슈팅 가이드](../../docs/TROUBLESHOOTING.md)
 
----
-
-**작성일**: 2025년 11월 14일
-**버전**: 1.0

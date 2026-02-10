@@ -1,4 +1,10 @@
 # docker-compose.yml
+#
+# [DEPRECATED] 이 파일은 v2(EC2 기반) 아키텍처의 잔존 설정입니다.
+# 현재 v3 아키텍처에서는 GCP K3s + ArgoCD(GitOps) 기반으로 배포하며,
+# 로컬 개발 환경은 k8s-manifests/overlays/local/ + Skaffold을 사용합니다.
+# 이 파일의 Service 구성(load-balancer, dashboard-ui 등)은 현재 아키텍처와 일치하지 않습니다.
+#
 version: '3.8'
 
 # 이 파일은 EC2 서버에서 CI/CD Pipeline에 의해 실행됩니다.

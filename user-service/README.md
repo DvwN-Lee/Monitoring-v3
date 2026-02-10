@@ -9,7 +9,7 @@
 - **사용자 계정 관리**: 사용자 생성(회원가입), ID 및 사용자 이름 기반의 사용자 정보 조회 기능을 제공 
 - **자격 증명 검증**: `auth-service`로부터 요청을 받아, 데이터베이스에 저장된 해시된 비밀번호와 사용자가 입력한 비밀번호를 안전하게 비교하여 인증을 지원
 - **성능 최적화 (캐싱)**: 조회된 사용자 정보를 Redis 캐시에 저장하여 반복적인 데이터베이스 접근을 최소화하고, 이를 통해 시스템 전체의 응답 속도를 향상시킴
-- **데이터 저장소 상태 모니터링**: `load-balancer`가 DB와 캐시의 현재 상태(정상/비정상)를 파악할 수 있도록 상세한 상태 정보를 `/stats` 엔드포인트를 통해 제공
+- **데이터 저장소 상태 모니터링**: `api-gateway`가 DB와 캐시의 현재 상태(정상/비정상)를 파악할 수 있도록 상세한 상태 정보를 `/stats` 엔드포인트를 통해 제공
 
 ## 3. 기술적 구현 (`database_service.py`, `cache_service.py`)
 - FastAPI를 기반으로 비동기 처리를 지원하며, 데이터베이스와 캐시 로직을 별도의 클래스(`UserServiceDatabase`, `CacheService`)로 분리하여 관리
@@ -41,7 +41,7 @@
 |`/users/{username}`|`GET`|사용자 이름으로 특정 사용자의 정보를 조회|
 |`/users/verify-credentials`|`POST`|`auth-service`의 요청을 받아 사용자의 아이디와 비밀번호 유효성을 검증|
 |`/health`|`GET`|Service의 기본 상태를 확인하는 헬스 체크 엔드포인트|
-|`/stats`|`GET`|`load-balancer`를 위해 DB와 캐시를 포함한 Service의 상세 상태 정보를 반환|
+|`/stats`|`GET`|`api-gateway`를 위해 DB와 캐시를 포함한 Service의 상세 상태 정보를 반환|
 
 ## 5. Container화 (`Dockerfile`)
 - **베이스 이미지**: `python:3.11-slim`을 사용하여 Container 이미지의 크기를 최소화

@@ -1,6 +1,6 @@
 # Top-Down 전체 서비스 테스트 시스템
 
-Monitoring-v2 프로젝트의 모든 Service를 Top-Down 방식으로 검증하는 종합 테스트 시스템입니다.
+Monitoring-v3 프로젝트의 모든 Service를 Top-Down 방식으로 검증하는 종합 테스트 시스템입니다.
 
 ## 테스트 레벨 구조
 
@@ -39,11 +39,11 @@ cd tests
 ./infrastructure/gitops-test.sh
 
 # Level 3: Individual Services
-./unit/api-gateway-test.sh
-./unit/auth-service-test.sh
-./unit/user-service-test.sh
-./unit/blog-service-test.sh
-./unit/database-test.sh
+./smoke/api-gateway-test.sh
+./smoke/auth-service-test.sh
+./smoke/user-service-test.sh
+./smoke/blog-service-test.sh
+./smoke/database-test.sh
 
 # Level 2: Integration
 ./integration/routing-test.sh
@@ -276,4 +276,4 @@ Level 1 E2E 테스트는 k6가 필요합니다. k6 없이도 Level 2-4 테스트
 
 ## 라이선스
 
-이 테스트 시스템은 Monitoring-v2 프로젝트의 일부입니다.
+이 테스트 시스템은 Monitoring-v3 프로젝트의 일부입니다.

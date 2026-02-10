@@ -103,7 +103,7 @@ flowchart TB
 | 노드 역할 | 스펙 | 수량 |
 |----------|------|------|
 | Server (Control Plane) | e2-medium (2 vCPU, 4GB) | 1 |
-| Agent (Worker) | e2-medium (2 vCPU, 4GB) | 2 |
+| Agent (Worker) | e2-standard-2 (2 vCPU, 8GB) | 2 |
 
 ### Bootstrap 자동화 흐름
 
@@ -166,6 +166,7 @@ flowchart TB
     Auth --> Redis
     Blog --> Auth
     Blog --> PG
+    Blog --> Redis
     User --> PG
     User --> Redis
 ```
@@ -174,7 +175,7 @@ flowchart TB
 
 | Service | 기술 | 포트 | 역할 |
 |---------|------|------|------|
-| api-gateway | Go (Gin) | 8000 | API 라우팅, Rate Limiting |
+| api-gateway | Go (net/http) | 8000 | API 라우팅, Rate Limiting |
 | auth-service | Python (FastAPI) | 8002 | JWT 인증, 로그인 |
 | user-service | Python (FastAPI) | 8001 | 사용자 CRUD |
 | blog-service | Python (FastAPI) | 8005 | 블로그 CRUD, 프론트엔드 |
@@ -183,14 +184,16 @@ flowchart TB
 
 ### Istio 라우팅 (VirtualService)
 
-| 경로 | 대상 Service |
-|------|-------------|
-| `/blog/*` | blog-service:8005 |
-| `/api/users/*` | user-service:8001 |
-| `/api/login` | auth-service:8002 |
-| `/api/auth/*` | auth-service:8002 |
-| `/api/*` (fallback) | api-gateway:8000 |
-| `/` | blog-service:8005 |
+| 경로 | 대상 Service | Rewrite |
+|------|-------------|---------|
+| `/blog/*` | blog-service:8005 | - |
+| `/api/users/health` | user-service:8001 | `/health` |
+| `/api/users/*` | user-service:8001 | `/users` |
+| `/api/login` | auth-service:8002 | `/login` |
+| `/api/auth/health` | auth-service:8002 | `/health` |
+| `/api/auth/*` | auth-service:8002 | `/` |
+| `/api/*` (fallback) | api-gateway:8000 | - |
+| `/` | blog-service:8005 | - |
 
 ---
 
@@ -204,11 +207,13 @@ flowchart TB
         Root[root-app<br/>App of Apps]
 
         subgraph InfraApps["Infrastructure Apps"]
+            IstioBase[istio-base]
             Istiod[istiod]
             Gateway[istio-ingressgateway]
-            Prom[prometheus]
+            Prom[kube-prometheus-stack]
             Loki[loki-stack]
-            ESO[external-secrets]
+            ESO[external-secrets-operator]
+            Kiali[kiali]
         end
 
         subgraph AppApps["Application Apps"]
@@ -237,12 +242,14 @@ Monitoring-v3/
 ├── apps/                          # ArgoCD Application 정의
 │   ├── root-app.yaml              # Root Application (진입점)
 │   ├── infrastructure/            # Infrastructure Apps
-│   │   ├── argocd.yaml
-│   │   ├── istiod.yaml
+│   │   ├── external-secrets-operator.yaml
+│   │   ├── istio-base.yaml
 │   │   ├── istio-ingressgateway.yaml
-│   │   ├── prometheus.yaml
-│   │   ├── loki-stack.yaml
-│   │   └── external-secrets.yaml
+│   │   ├── istiod.yaml
+│   │   ├── kiali.yaml
+│   │   ├── kube-prometheus-stack.yaml
+│   │   ├── kustomization.yaml
+│   │   └── loki-stack.yaml
 │   └── applications/              # Application Apps
 │       └── titanium-prod.yaml
 ├── k8s-manifests/                 # Kubernetes 리소스 정의
@@ -357,7 +364,11 @@ flowchart TB
 | api-gateway | auth/user/blog-service | 800* | API 프록시 |
 | auth-service | user-service | 8001 | 사용자 조회 |
 | auth-service | redis | 6379 | JWT 저장 |
-| user/blog-service | postgresql | 5432 | 데이터 저장 |
+| blog-service | auth-service | 8002 | JWT 토큰 검증 |
+| user-service | postgresql | 5432 | 데이터 저장 |
+| blog-service | postgresql | 5432 | 데이터 저장 |
+| user-service | redis | 6379 | 캐싱 |
+| blog-service | redis | 6379 | 캐싱 |
 | 모든 Pod | kube-dns | 53/UDP | DNS 조회 |
 | 모든 Pod | istiod | 15012, 15010 | Istio Control Plane |
 

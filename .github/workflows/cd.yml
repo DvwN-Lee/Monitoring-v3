@@ -55,7 +55,7 @@ jobs:
           echo "$CHANGED_FILES"
 
           SERVICES=""
-          for service in user-service blog-service auth-service api-gateway load-balancer dashboard-ui; do
+          for service in user-service blog-service auth-service api-gateway; do
             if echo "$CHANGED_FILES" | grep -q "^${service}/"; then
               SERVICES="$SERVICES $service"
             fi
