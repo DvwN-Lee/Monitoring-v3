@@ -76,6 +76,8 @@
 
 ```
 2025-12-18  프로젝트 시작
+2025-12-19  ADR-010 (Python FastAPI Framework)
+2025-12-28  ADR-008 (PostgreSQL), ADR-009 (GitHub Actions CI)
 2025-12-31  ADR-001 (GCP + K3s), ADR-002 (ArgoCD), ADR-003 (Terraform)
 2026-01-10  ADR-007 (Monitoring Stack)
 2026-01-15  ADR-004 (Istio Service Mesh)
