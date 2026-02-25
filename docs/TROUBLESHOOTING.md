@@ -1,5 +1,8 @@
 # Troubleshooting Guide
 
+> **참고**: 카테고리별로 분류된 Troubleshooting 문서는 [05-troubleshooting/README.md](05-troubleshooting/README.md)에서 확인할 수 있다.
+> 이 문서는 전체 내용을 단일 파일로 포함하는 레거시 버전이다.
+
 K3s + ArgoCD + GitOps 기반 인프라 배포 및 테스트 중 발생한 문제와 해결 방법을 정리한 문서.
 
 ## 목차

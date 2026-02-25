@@ -29,7 +29,7 @@ Terraform(IaC), ArgoCD(GitOps), Istio(Service Mesh)를 통해 End-to-End 자동�
 | 계층 | 기술 |
 |------|------|
 | Cloud Provider | Google Cloud Platform (GCP) |
-| Kubernetes | K3s v1.31 |
+| Kubernetes | K3s v1.31.4+k3s1 |
 | IaC | Terraform |
 | GitOps | ArgoCD |
 | Service Mesh | Istio v1.24.2 |
@@ -109,7 +109,7 @@ Monitoring-v3/
 ├── api-gateway/                  # Go (net/http) - API 라우팅
 ├── auth-service/                 # Python (FastAPI) - JWT 인증
 ├── user-service/                 # Python (FastAPI) - 사용자 관리
-├── blog-service/                 # Python (FastAPI) - 블로그 + Frontend
+├── blog-service/                 # Python (FastAPI + Jinja2) - 블로그 + Frontend
 ├── scripts/                      # 유틸리티 스크립트
 ├── docs/                         # 문서
 │   ├── architecture/             # 아키텍처 문서
@@ -188,7 +188,7 @@ terraform destroy
 | api-gateway | Go (net/http) | 8000 | API 라우팅, Rate Limiting |
 | auth-service | Python (FastAPI) | 8002 | JWT 인증, 로그인 |
 | user-service | Python (FastAPI) | 8001 | 사용자 CRUD |
-| blog-service | Python (FastAPI) | 8005 | 블로그 CRUD, Frontend |
+| blog-service | Python (FastAPI + Jinja2) | 8005 | 블로그 CRUD, Frontend |
 | postgresql | PostgreSQL 15 | 5432 | 영구 데이터 저장 |
 | redis | Redis 7 | 6379 | JWT Token 캐싱 |
 
