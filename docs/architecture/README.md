@@ -2,7 +2,7 @@
 
 ## 개요
 
-Titanium은 GCP 기반 Kubernetes(K3s) 환경에서 운영되는 Microservice 기반 Monitoring Platform이다. Infrastructure as Code(Terraform), GitOps(ArgoCD), Service Mesh(Istio)를 통해 End-to-End 자동화를 구현한다.
+Titanium은 GCP 기반 Kubernetes(K3s) 환경에서 운영되는 Microservice 기반 Monitoring Platform이다. Infrastructure as Code(Terraform), GitOps(ArgoCD), Service Mesh(Istio)를 통해 인프라 프로비저닝부터 애플리케이션 배포까지 자동화를 구현한다.
 
 ## 기술 스택
 
@@ -494,6 +494,80 @@ flowchart LR
     Istiod -.->|issue cert| Envoy1
     Istiod -.->|issue cert| Envoy2
 ```
+
+---
+
+## AI Agent 관점 아키텍처
+
+본 프로젝트의 마이크로서비스 구조는 AI Agent 시스템의 구조와 유사성을 가진다.
+아래는 기존 구현을 AI Agent 관점에서 재라벨링한 다이어그램이다. 실제 AI Agent를 구현한 것이 아닌, 구조적 유사성을 나타낸다.
+
+```mermaid
+flowchart TB
+    subgraph Entry["Entry Point"]
+        IGW[Istio IngressGateway<br/>Entry Point]
+    end
+
+    subgraph AgentLayer["Agent Services (titanium-prod NS)"]
+        Orchestrator[api-gateway → Orchestrator<br/>Go :8000<br/>요청 라우팅, Rate Limiting]
+        Identity[auth-service → Identity Provider<br/>Python :8002<br/>JWT 인증]
+        DataSvc[user-service → Data Service<br/>Python :8001<br/>사용자 CRUD]
+        AppSvc[blog-service → Application Service<br/>Python :8005<br/>비즈니스 로직]
+    end
+
+    subgraph StateLayer["State / Storage Layer"]
+        Redis[(Redis → State/Cache Layer<br/>:6379)]
+        PG[(PostgreSQL → Persistent Storage<br/>:5432)]
+    end
+
+    subgraph Security["보안 통신"]
+        mTLS[Istio mTLS<br/>서비스 간 암호화 통신]
+    end
+
+    IGW -->|/api/*| Orchestrator
+    Orchestrator --> Identity
+    Orchestrator --> DataSvc
+    Orchestrator --> AppSvc
+
+    Identity --> Redis
+    Identity --> DataSvc
+    AppSvc --> PG
+    AppSvc --> Redis
+    DataSvc --> PG
+    DataSvc --> Redis
+
+    mTLS -.->|적용| AgentLayer
+```
+
+### 구조적 유사성
+
+| 현재 구현 | AI Agent 시스템 대응 | 유사성 |
+|-----------|-------------------|--------|
+| api-gateway (라우팅) | Orchestrator Agent (작업 분배) | 요청을 적절한 서비스로 라우팅 |
+| auth-service (JWT) | Agent Identity/Auth | 서비스 인증 및 권한 관리 |
+| Redis (캐싱) | Agent State/Memory | 상태 저장 및 조회 |
+| Istio mTLS | Agent 간 보안 통신 | Zero Trust 기반 서비스 간 통신 |
+| ArgoCD (GitOps) | Agent 배포 자동화 | 선언적 서비스 추가/업데이트 |
+| Prometheus (메트릭) | Agent Observability | 서비스 상태 및 성능 모니터링 |
+
+---
+
+## 인프라 기술 — AI Agent 영역 대응 관계
+
+본 프로젝트에서 구현한 인프라 기술과 AI Agent 영역의 대응 관계를 정리한다.
+
+| 인프라 역량 (구현 완료) | AI Agent 확장 가능 영역 | 기술적 근거 |
+|----------------------|----------------------|-------------|
+| K3s Cluster 운영 | LLM 추론 서버 배포 | vLLM, KServe는 Kubernetes 기반 배포 |
+| Terraform IaC | AI 인프라 자동 프로비저닝 | GPU 클러스터도 Terraform으로 관리 가능 |
+| Prometheus + Grafana | LLM 메트릭 모니터링 | Grafana LLM Plugin, OpenTelemetry GenAI SIG |
+| Loki 로그 수집 | 프롬프트/응답 트레이싱 | 중앙 집중 로그 파이프라인 구조 동일 |
+| Istio mTLS | Multi-Agent 보안 통신 | Zero Trust 네트워크 정책으로 서비스 간 통신 제어 |
+| ArgoCD App of Apps | ML/LLM 모델 선언적 배포 | App of Apps 패턴에서 YAML 추가로 새 서비스 배포 구조 |
+| External Secrets + GCP SM | LLM API Key 보안 관리 | Secret 자동 동기화 구조 동일 |
+| NetworkPolicy (Zero Trust) | Agent 간 접근 제어 | Default Deny + Explicit Allow 패턴 |
+| GitHub Actions CI | ML/LLM CI 파이프라인 | 모델 테스트, 이미지 빌드, 취약점 스캔 |
+| Microservice Architecture | Multi-Agent Architecture | 독립 배포, 스케일링, 장애 격리 |
 
 ---
 
