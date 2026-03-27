@@ -38,7 +38,7 @@ MoSCoW 우선순위 분류 기반 프로젝트 요구사항 정의.
 | S-3 | Kiali Service Mesh Dashboard | 완료 | [Demo](../demo/README.md) |
 | S-4 | MIG Auto-healing (Worker Node 자동 복구) | 완료 | `terraform/environments/gcp/mig.tf` |
 | S-5 | Terraform 변수화 및 Environment 분리 | 완료 | [ADR-003](../architecture/adr/003-terraform-variable-structure.md) |
-| S-6 | Troubleshooting 문서화 | 완료 | [Troubleshooting](../05-troubleshooting/README.md) |
+| S-6 | Troubleshooting 문서화 | 완료 | [Troubleshooting](../04-troubleshooting/README.md) |
 
 ## Could Have (선택)
 

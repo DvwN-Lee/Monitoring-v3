@@ -54,7 +54,7 @@
 
 | Milestone | 상태 | 주요 산출물 |
 |-----------|------|------------|
-| IaC 배포 문제 해결 (10건) | 완료 | `docs/TROUBLESHOOTING.md` Part 1 |
+| IaC 배포 문제 해결 (10건) | 완료 | `docs/04-troubleshooting/` 카테고리별 문서 |
 | Kiali multi-cluster 이슈 해결 | 완료 | Single-cluster 설정 최적화 |
 | 문서-코드 정합성 검증 | 완료 | Architecture, Demo, ADR |
 | Demo 검증 및 스크린샷 | 완료 | `docs/demo/` (23종) |
@@ -91,4 +91,4 @@
 - [Requirements](requirements.md)
 - [Architecture](../architecture/README.md)
 - [ADR Index](../architecture/adr/README.md)
-- [Implementation Summary](../03-implementation/implementation-summary.md)
+- [Implementation Summary](../02-implementation/implementation-summary.md)

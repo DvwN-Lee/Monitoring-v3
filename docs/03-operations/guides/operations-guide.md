@@ -246,5 +246,5 @@ kubectl delete app <APP_NAME> -n argocd
 ## 관련 문서
 
 - [Secret Management](../../secret-management.md)
-- [Troubleshooting](../../05-troubleshooting/README.md)
+- [Troubleshooting](../../04-troubleshooting/README.md)
 - [Operational Changes](../../operational-changes.md)

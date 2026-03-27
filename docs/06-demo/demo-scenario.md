@@ -230,4 +230,4 @@ k6 run tests/e2e/e2e-test.js -e BASE_URL=http://${MASTER_IP}:31080
 
 - [Demo Screenshots](../demo/README.md)
 - [Architecture](../architecture/README.md)
-- [Performance](../06-performance/README.md)
+- [Performance](../05-performance/README.md)

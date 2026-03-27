@@ -82,13 +82,13 @@
 |------|------|
 | 담당 Agent | sprint2-docs |
 | 작업 | 신규 문서 2개 작성 |
-| 산출물 | docs/09-ai-dev-workflow/README.md (121줄), docs/10-llm-observability/README.md (150줄) |
+| 산출물 | docs/08-ai-dev-workflow/README.md (121줄), docs/09-llm-observability/README.md (150줄) |
 
-docs/09-ai-dev-workflow/README.md:
+docs/08-ai-dev-workflow/README.md:
 - 코드 개발 워크플로우 (Mermaid 다이어그램, worktree 7개 목록, 개발 수치, PR 패턴)
 - 문서화 재구성 워크플로우 (Agent Teams 구성, Sprint 구성)
 
-docs/10-llm-observability/README.md:
+docs/09-llm-observability/README.md:
 - 현재 구현된 Observability 스택 (Prometheus, Loki, Grafana 흐름도)
 - LLM Observability 확장 가능 영역 ("구현 완료" vs "미구현, 구조적으로 가능" 구분)
 - 아키텍처 비교 Mermaid 다이어그램
@@ -116,7 +116,7 @@ docs/10-llm-observability/README.md:
 |------|------|
 | 담당 Agent | sprint4-final |
 | 작업 | Scrum 프로세스 문서 작성, 문서 정합성 검증 |
-| 산출물 | docs/11-scrum-process/README.md (본 문서) |
+| 산출물 | docs/10-scrum-process/README.md (본 문서) |
 
 ---
 
@@ -142,15 +142,15 @@ Sprint 2, Sprint 3 완료 → Sprint 4 시작
 | 파일 | 작업 | Sprint |
 |------|------|--------|
 | README.md | 수정 | Sprint 1 |
-| docs/09-ai-dev-workflow/README.md | 신규 | Sprint 2 |
-| docs/10-llm-observability/README.md | 신규 | Sprint 2 |
+| docs/08-ai-dev-workflow/README.md | 신규 | Sprint 2 |
+| docs/09-llm-observability/README.md | 신규 | Sprint 2 |
 | docs/architecture/README.md | 보강 | Sprint 3 |
-| docs/11-scrum-process/README.md | 신규 | Sprint 4 |
+| docs/10-scrum-process/README.md | 신규 | Sprint 4 |
 
 ---
 
 ## 관련 문서
 
-- [AI 개발 워크플로우](../09-ai-dev-workflow/README.md)
-- [LLM Observability 적용 가이드](../10-llm-observability/README.md)
+- [AI 개발 워크플로우](../08-ai-dev-workflow/README.md)
+- [LLM Observability 적용 가이드](../09-llm-observability/README.md)
 - [Architecture](../architecture/README.md)

@@ -574,5 +574,5 @@ flowchart TB
 ## 관련 문서
 
 - [ADR 목록](adr/README.md): Architecture Decision Records
-- [Troubleshooting](../TROUBLESHOOTING.md): IaC 배포 및 테스트 문제 해결
+- [Troubleshooting](../04-troubleshooting/README.md): IaC 배포 및 테스트 문제 해결
 - [Secret 관리](../secret-management.md): Secret 관리 가이드

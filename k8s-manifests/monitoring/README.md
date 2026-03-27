@@ -225,5 +225,5 @@ sum(count_over_time({namespace="titanium-prod"}[5m]))
 - [Grafana Documentation](https://grafana.com/docs/)
 - [Loki Documentation](https://grafana.com/docs/loki/latest/)
 - [프로젝트 아키텍처 문서](../../docs/architecture/README.md)
-- [트러블슈팅 가이드](../../docs/TROUBLESHOOTING.md)
+- [트러블슈팅 가이드](../../docs/04-troubleshooting/README.md)
 

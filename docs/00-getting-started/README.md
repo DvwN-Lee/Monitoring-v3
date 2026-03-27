@@ -167,5 +167,5 @@ terraform destroy
 ## 다음 단계
 
 - [Architecture](../architecture/README.md): 시스템 아키텍처 상세 이해
-- [Operations Guide](../04-operations/guides/operations-guide.md): 일상 운영 절차
-- [Troubleshooting](../05-troubleshooting/README.md): 문제 발생 시 해결 가이드
+- [Operations Guide](../03-operations/guides/operations-guide.md): 일상 운영 절차
+- [Troubleshooting](../04-troubleshooting/README.md): 문제 발생 시 해결 가이드

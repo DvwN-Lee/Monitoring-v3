@@ -117,6 +117,6 @@ flowchart LR
 
 ## 관련 문서
 
-- [Scrum 프로세스](../11-scrum-process/README.md)
-- [LLM Observability 적용 가이드](../10-llm-observability/README.md)
+- [Scrum 프로세스](../10-scrum-process/README.md)
+- [LLM Observability 적용 가이드](../09-llm-observability/README.md)
 - [Architecture](../architecture/README.md)

@@ -67,7 +67,6 @@ Terratest 및 테스트 자동화 관련 문제.
 
 ## 참조
 
-- 기존 통합 문서: [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) (전체 내용 포함)
 - [Secret Management](../secret-management.md)
 - [Operational Changes](../operational-changes.md)
 

@@ -55,7 +55,7 @@ Claude Code와 git worktree를 활용하여 개발하였으며, 문서화 재구
 | ArgoCD GitOps | ML/LLM 모델 선언적 배포 | App of Apps 패턴으로 서비스 추가 가능 |
 | External Secrets | LLM API Key 보안 관리 | GCP Secret Manager 연동 |
 
-상세: [LLM Observability 적용 가이드](docs/10-llm-observability/README.md)
+상세: [LLM Observability 적용 가이드](docs/09-llm-observability/README.md)
 
 ## AI-Assisted Development
 
@@ -69,7 +69,7 @@ Claude Code와 git worktree를 활용하여 개발하였으며, 문서화 재구
 
 문서화 재구성은 Agent Teams(3명)를 구성하여 Scrum으로 진행하였다.
 
-상세: [AI 개발 워크플로우](docs/09-ai-dev-workflow/README.md) | [Scrum 프로세스](docs/11-scrum-process/README.md)
+상세: [AI 개발 워크플로우](docs/08-ai-dev-workflow/README.md) | [Scrum 프로세스](docs/10-scrum-process/README.md)
 
 ## 아키텍처
 
@@ -149,10 +149,10 @@ Monitoring-v3/
 ├── docs/                         # 문서
 │   ├── architecture/             # 아키텍처 문서
 │   ├── demo/                     # 데모 스크린샷
-│   ├── 09-ai-dev-workflow/       # AI 개발 워크플로우
-│   ├── 10-llm-observability/     # LLM Observability 적용 가이드
-│   ├── 11-scrum-process/         # Scrum 프로세스 기록
-│   ├── TROUBLESHOOTING.md        # IaC 배포 및 테스트 문제 해결
+│   ├── 08-ai-dev-workflow/       # AI 개발 워크플로우
+│   ├── 09-llm-observability/     # LLM Observability 적용 가이드
+│   ├── 10-scrum-process/         # Scrum 프로세스 기록
+│   ├── 04-troubleshooting/       # IaC 배포 및 테스트 문제 해결 (카테고리별)
 │   ├── secret-management.md      # Secret 관리 가이드
 │   └── operational-changes.md    # 운영 변경 이력
 └── tests/                        # 종합 테스트 (Smoke, Integration, E2E)
@@ -257,11 +257,11 @@ terraform destroy
 | [Architecture](docs/architecture/README.md) | 상세 아키텍처 문서 |
 | [ADR](docs/architecture/adr/) | Architecture Decision Records |
 | [Demo](docs/demo/README.md) | GCP Production 환경 데모 |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | IaC 배포 및 테스트 문제 해결 |
+| [Troubleshooting](docs/04-troubleshooting/README.md) | IaC 배포 및 테스트 문제 해결 |
 | [Secret Management](docs/secret-management.md) | Secret 관리 가이드 |
-| [AI 개발 워크플로우](docs/09-ai-dev-workflow/README.md) | Claude Code + git worktree 개발 과정 |
-| [LLM Observability](docs/10-llm-observability/README.md) | LLM Observability 적용 가이드 |
-| [Scrum 프로세스](docs/11-scrum-process/README.md) | Agent Teams Scrum 프로세스 기록 |
+| [AI 개발 워크플로우](docs/08-ai-dev-workflow/README.md) | Claude Code + git worktree 개발 과정 |
+| [LLM Observability](docs/09-llm-observability/README.md) | LLM Observability 적용 가이드 |
+| [Scrum 프로세스](docs/10-scrum-process/README.md) | Agent Teams Scrum 프로세스 기록 |
 
 ## License
 

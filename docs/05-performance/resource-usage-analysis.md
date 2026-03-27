@@ -111,4 +111,4 @@ sum(rate(container_network_transmit_bytes_total{namespace!=""}[5m])) by (namespa
 
 - [Performance README](README.md)
 - [Load Test Results](load-test-results.md)
-- [Operations Guide](../04-operations/guides/operations-guide.md)
+- [Operations Guide](../03-operations/guides/operations-guide.md)
